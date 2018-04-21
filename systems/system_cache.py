@@ -162,7 +162,7 @@ class systemCache(dict):
     def __repr__(self):
         if self.are_we_caching():
             list_of_elements = ", ".join([
-                cache_ref.__repr__()
+                cache_ref.__repr__
                 for cache_ref in self.get_items_with_data()
             ])
             return "Cache, elements: " + list_of_elements
@@ -219,10 +219,12 @@ class systemCache(dict):
         """
         Loads the saved cache
 
-        Note that certain elements (accountCurve objects and optimisers) won't be pickled, and so won't
-           be loaded. You will need to regenerate these.
+        Note that certain elements (accountCurve objects and optimisers) won't
+           be pickled, and so won't be loaded. You will need to regenerate
+           these.
 
-        If clearcache is True then we clear the entire cache first. Otherwise we end up with a 'mix'
+        If clearcache is True then we clear the entire cache first. Otherwise
+          we end up with a 'mix'
            - not advised so do at your peril
 
         :param filename: cache location

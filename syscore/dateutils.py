@@ -32,6 +32,34 @@ UNIXTIME_CONVERTER = 1e9
 
 UNIXTIME_IN_YEAR = UNIXTIME_CONVERTER * SECONDS_IN_YEAR
 
+MONTH_LIST = ["F", "G", "H", "J", "K", "M", "N", "Q", "U", "V", "X", "Z"]
+
+
+def month_from_contract_letter(contract_letter):
+    """
+    Returns month number (1 is January) from contract letter
+
+    :param contract_letter:
+    :return:
+    """
+
+    try:
+        month_number = MONTH_LIST.index(contract_letter)
+    except ValueError:
+        return None
+
+    return month_number+1
+
+
+def contract_month_from_number(month_number):
+    """
+    Returns standard month letters used in futures land
+
+    :param month_number: int
+    :return: str
+    """
+
+    return MONTH_LIST[month_number-1]
 
 def expiry_date(expiry_ident):
     """
@@ -44,6 +72,9 @@ def expiry_date(expiry_ident):
     :returns: datetime.datetime or datetime.date
 
     >>> expiry_date('201503')
+    datetime.datetime(2015, 3, 1, 0, 0)
+
+    >>> expiry_date('20150300')
     datetime.datetime(2015, 3, 1, 0, 0)
 
     >>> expiry_date('20150305')
@@ -59,6 +90,9 @@ def expiry_date(expiry_ident):
         if len(expiry_ident) == 6:
             expiry_date = datetime.datetime.strptime(expiry_ident, "%Y%m")
         elif len(expiry_ident) == 8:
+            if expiry_ident[6:8]=="00":
+                expiry_ident = expiry_ident[:6]+"01"
+
             expiry_date = datetime.datetime.strptime(expiry_ident, "%Y%m%d")
         else:
             raise Exception("")

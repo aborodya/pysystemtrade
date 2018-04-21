@@ -15,6 +15,8 @@ def turnover(x, y):
     Gives the turnover of x, once normalised for y
 
     Returned in annualised terms
+
+    Assumes both x and y are daily business days
     """
 
     if isinstance(y, float):
@@ -79,7 +81,7 @@ def must_have_item(slice_data):
     """
     Returns the columns of slice_data for which we have at least one non nan value
 
-    :param slice_data: Data to get correlations from
+    :param slice_data: simData to get correlations from
     :type slice_data: pd.DataFrame
 
     :returns: list of bool
@@ -138,43 +140,6 @@ def pd_readcsv(filename, date_index_name="DATETIME"):
     ans.index.name = None
 
     return ans
-
-
-def apply_cap(pd_series, capvalue):
-    """
-    Applies a cap to the values in a Tx1 pandas series
-
-    :param pd_series: Tx1 pandas series
-    :type pd_dataframe: pd.Series
-
-    :param capvalue: Maximum absolute value allowed
-    :type capvlue: int or float
-
-
-    :returns: pd.DataFrame Tx1
-
-    >>> x=pd.Series([2.0, 7.0, -7.0, -6.99], pd.date_range(pd.datetime(2015,1,1), periods=4))
-    >>> apply_cap(x, 5.0)
-    2015-01-01    2.0
-    2015-01-02    5.0
-    2015-01-03   -5.0
-    2015-01-04   -5.0
-    Freq: D, dtype: float64
-    """
-    # Will do weird things otherwise
-    assert capvalue > 0
-
-    # create max and min columns
-    max_ts = pd.Series([capvalue] * len(pd_series), pd_series.index)
-    min_ts = pd.Series([-capvalue] * len(pd_series), pd_series.index)
-
-    joined_ts = pd.concat([pd_series, max_ts], axis=1)
-    joined_ts = joined_ts.min(axis=1)
-    joined_ts = pd.concat([joined_ts, min_ts], axis=1)
-    joined_ts = joined_ts.max(axis=1)
-
-    joined_ts[np.isnan(pd_series)] = np.nan
-    return joined_ts
 
 
 def fix_weights_vs_pdm(weights, pdm):
@@ -265,7 +230,7 @@ def create_arbitrary_pdseries(data_list,
     """
     Return a pandas Series with an arbitrary date index
 
-    :param data_list: Data
+    :param data_list: simData
     :type data_list: list of floats or ints
 
     :param date_start: First date to use in index
@@ -274,7 +239,7 @@ def create_arbitrary_pdseries(data_list,
     :param freq: Frequency of date index
     :type freq: str of a type that pd.date_range will recognise
 
-    :returns: pd.Series  (same length as Data)
+    :returns: pd.Series  (same length as simData)
 
     >>> create_arbitrary_pdseries([1,2,3])
     1980-01-01    1

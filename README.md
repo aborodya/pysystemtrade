@@ -7,10 +7,10 @@ Rob Carver
 [http://qoppac.blogspot.co.uk/p/pysystemtrade.html](http://qoppac.blogspot.co.uk/p/pysystemtrade.html)
 
 
-Version 0.16.1
+Version 0.18.1
 
 
-20180103
+20180318
 
 
 ## Release notes
@@ -24,12 +24,13 @@ See [DONE_TO_DO](DONE_TO_DO.md) for release notes, and future plans.
 
 For a longer explanation of the motivation and point of this project see my [blog post.](http://qoppac.blogspot.co.uk/2015/12/pysystemtrade.html)
 
-*Eventually* pysystemtrade will include the following:
-
-- Backtesting enviroment that will work "out of the box" for the three examples in "Systematic Trading" 
+Currently pysystemtrade can do the following:
+- Backtesting enviroment that will work "out of the box" for chapter 15 of my book ["Systematic Trading"](systematicmoney.org/systematic-trading)
 - Implement all the optimisation and system design principles in the book.
+
+*Eventually* pysystemtrade will also include the following:
+
 - Complete implementation of a fully automated system for futures trading (for interactive brokers only), including regularly updated data
-- Code to run the present, and future, examples on my blog qoppac.blogspot.co.uk
 
 
 ## Use and documentation
@@ -38,10 +39,12 @@ For a longer explanation of the motivation and point of this project see my [blo
 
 [User guide](docs/userguide.md)
 
+[Working with futures data](/docs/futures.md)
 
 ## Dependencies
 
-Python 3.x, pandas, matplotlib, pyyaml, numpy, scipy
+Python 3.x, pandas, matplotlib, pyyaml, numpy, scipy, quandl
+
 See [requirements.txt](requirements.txt) for full details.
 
 Make sure you get the python3 versions of the relevant packages, i.e. use:

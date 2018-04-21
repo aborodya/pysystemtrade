@@ -1,5 +1,36 @@
 # Release notes
 
+## Version 0.18.1
+Finished populating configuration files for Quandl and roll configuration.
+Debugged futures.md documentation file.
+
+## Version 0.18
+See [futures documentation](/docs/futures.md) for more details.
+New data sources: Quandl. Data storage in mongodb and arctic is now supported.
+Back-adjustment is possible and can be done 'on the fly' or from scratch with new data. 
+Further refactoring of sim data objects to support the above.
+
+## Version 0.17
+Massive refactoring of sim data objects, to support alternative data sources and backadjusting
+
+## Version 0.16.6
+Created classses for individual futures contracts, and included example of how to use Quandl to get them
+
+## Version 0.16.5
+Updated .csv data and moved to seperate section - now stored under Github LFS
+
+## Version 0.16.4
+Added quandl data (but only for individual futures contracts right now so useless)
+
+## Version 0.16.3
+Removed uses of old carry function which was deprecated
+
+## Version 0.16.2
+Fixed incorrect calculation of returns over weekends
+Forecast scalars now only pool across the set of instruments using a given trading rule
+Changed error handling for empty Rules() objects
+Added TOC to userguide.md file
+
 ## Version 0.16.1
 Updated to pandas 0.22.0
 Fixed issue #64, #68, #70 and other issues relating to pandas API update breaking correlation matrices
@@ -248,12 +279,7 @@ Moved most examples except core to seperate git [here](https://github.com/robcar
 
 * Simulation:
    
-  * add other trading rules (some in private...?) - cross sectional carry
-  * quandl data
-  * stitch futures contracts 
-  * add new data from unstitched contracts (with explanatory post, include explanation for Nth contract stitching)
   * Create live config from a system object (Put final value of estimates into a yaml file) 
-  * database data
   * Exogenous risk model
   * check systems have correct attributes; check turnover, minimum size, right forecast scalars (distribution across instruments) etc
 

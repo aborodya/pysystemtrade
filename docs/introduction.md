@@ -1,6 +1,7 @@
  
 
 Here is a whistlestop tour of what pysystemtrade can currently do. You'll probably want to read the [users guide](userguide.md) after this.
+Notice that you will see different results than shown here, as you will be using more up to date data.
 
 ## A simple trading rule
 
@@ -9,7 +10,7 @@ Here is a whistlestop tour of what pysystemtrade can currently do. You'll probab
 As systematic traders we believe that the future will be at least a bit like the past. So first of all we need some past data. In principle past data can come from many places, but to begin with we'll get it from some pre-baked .csv files: 
 
 ```python
-from sysdata.csvdata import csvFuturesData
+from sysdata.csv.csv_sim_futures_data import csvFuturesSimData
 data=csvFuturesData()
 data
 ```
@@ -195,7 +196,7 @@ A full list of stages would include:
 For now let's start with the simplest possible system, one which contains only a trading rules stage. Let's just setup our enviroment again:
 
 ```python
-from sysdata.csvdata import csvFuturesData
+from sysdata.csv.csv_sim_futures_data import csvFuturesSimData
 data=csvFuturesData()
 
 from systems.provided.example.rules import ewmac_forecast_with_defaults as ewmac
@@ -672,10 +673,10 @@ By default this has loaded the same data and read the config from the same yaml 
 
 ```python
 from sysdata.configdata import Config
-from sysdata.csvdata import csvFuturesData
+from sysdata.csv.csv_sim_futures_data import csvFuturesSimData
 
 my_config=Config("systems.provided.example.simplesystemconfig.yaml")
-my_data=csvFuturesData()
+my_data=csvFuturesSimData()
 
 ## I could change my_config, and my_data here if I wanted to
 my_system=simplesystem(config=my_config, data=my_data)
