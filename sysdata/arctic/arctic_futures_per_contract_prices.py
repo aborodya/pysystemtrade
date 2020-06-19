@@ -6,11 +6,11 @@ Read and write data from mongodb for individual futures contracts
 from sysdata.arctic.arctic_connection import articConnection
 from sysdata.futures.futures_per_contract_prices import futuresContractPriceData, futuresContractPrices
 from sysdata.futures.contracts import futuresContract
+from syslogdiag.log import logtoscreen
 
 import pandas as pd
 
 CONTRACT_COLLECTION = 'futures_contract_prices'
-DEFAULT_DB = 'production'
 
 
 class arcticFuturesContractPriceData(futuresContractPriceData):
@@ -18,11 +18,11 @@ class arcticFuturesContractPriceData(futuresContractPriceData):
     Class to read / write futures price data to and from arctic
     """
 
-    def __init__(self, database_name= DEFAULT_DB):
+    def __init__(self,  mongo_db=None, log=logtoscreen("arcticFuturesContractPriceData")):
 
-        super().__init__()
+        super().__init__(log=log)
 
-        self._arctic = articConnection(database_name, collection_name=CONTRACT_COLLECTION)
+        self._arctic = articConnection(CONTRACT_COLLECTION, mongo_db=mongo_db)
 
         self.name = "simData connection for individual futures contracts prices, arctic %s/%s @ %s " % (
             self._arctic.database_name, self._arctic.collection_name, self._arctic.host)
@@ -69,11 +69,11 @@ class arcticFuturesContractPriceData(futuresContractPriceData):
         ## What if not found? CHECK
 
         ## Returns a data frame which should have the right format
-        data = item.data
+        data = pd.DataFrame(item.data)
 
         return futuresContractPrices(data)
 
-    def write_prices_for_contract_object(self, futures_contract_object, futures_price_data):
+    def _write_prices_for_contract_object_no_checking(self, futures_contract_object, futures_price_data):
         """
         Write prices
         CHECK prices are overriden on second write
@@ -83,11 +83,12 @@ class arcticFuturesContractPriceData(futuresContractPriceData):
         :return: None
         """
 
-        self.log.label(instument_code = futures_contract_object.instrument_code,
-                       contract_date = futures_contract_object.contract_date)
+        self.log.label(instrument_code = futures_contract_object.instrument_code,
+                       contract_date = futures_contract_object.date)
         ident = self._keyname_given_contract_object(futures_contract_object)
-        self._arctic.library.write(ident, futures_price_data)
-        self.log.msg("Wrote %s lines of prices for %s to %s" % (len(futures_price_data), futures_contract_object.ident(), self.name))
+        futures_price_data_aspd = pd.DataFrame(futures_price_data)
+        self._arctic.library.write(ident, futures_price_data_aspd)
+        self.log.msg("Wrote %s lines of prices for %s to %s" % (len(futures_price_data), str(futures_contract_object.ident()), self.name))
 
 
     def _all_keynames_in_library(self):
@@ -101,8 +102,8 @@ class arcticFuturesContractPriceData(futuresContractPriceData):
         :param futures_contract_object:
         :return: None
         """
-        self.log.label(instument_code = futures_contract_object.instrument_code,
-                       contract_date = futures_contract_object.contract_date)
+        self.log.label(instrument_code = futures_contract_object.instrument_code,
+                       contract_date = futures_contract_object.date)
 
         ident = self._keyname_given_contract_object(futures_contract_object)
         self._arctic.library.delete(ident)
@@ -126,7 +127,7 @@ class arcticFuturesContractPriceData(futuresContractPriceData):
         """
 
         list_of_contract_tuples = self._get_contract_tuples_with_price_data()
-        list_of_contracts = [futuresContract.simple(contract_tuple[0], contract_tuple[1]) for contract_tuple in list_of_contract_tuples]
+        list_of_contracts = [futuresContract(contract_tuple[0], contract_tuple[1]) for contract_tuple in list_of_contract_tuples]
 
         return list_of_contracts
 

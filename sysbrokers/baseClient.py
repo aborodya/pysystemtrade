@@ -1,3 +1,4 @@
+
 class brokerClient(object):
     """
 
@@ -7,8 +8,41 @@ class brokerClient(object):
 
     """
 
-    def __init__(self):
+    """
+    Following two methods implement context manager
+    """
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close_connection()
+
+
+    def broker_get_daily_fx_data(self, ccy1, ccy2="USD"):
+        raise NotImplementedError
+
+    def broker_get_futures_contract_list(self, instrument_object_with_broker_config):
+        raise NotImplementedError
+
+    def broker_get_historical_futures_data_for_contract(self, contract_object_with_broker_config):
+        raise NotImplementedError
+
+    def broker_get_contract_expiry_date(self, contract_object_with_ib_broker_config):
+        raise NotImplementedError
+
+    def broker_get_account_value_across_currency_across_accounts(self):
+        raise NotImplementedError
+
+    def close_connection(self):
         pass
 
-    def speakingClock(self):
-        print("Method needs to be overriden to do anything interesting")
+    def broker_get_positions(self):
+        raise NotImplementedError
+
+    def broker_submit_single_leg_order(self, instrument_code, contract_id, account,
+                                                  order_type = "market",
+                                                  limit_price = None):
+        raise NotImplementedError
+
+    def broker_get_orders(self):
+        raise NotImplementedError

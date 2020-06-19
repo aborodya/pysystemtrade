@@ -5,14 +5,15 @@ Basic building blocks of trading rules, like volatility measurement and
 crossovers
 
 """
+from copy import copy
 import warnings
 
 import numpy as np
 import pandas as pd
 
-from syscore.genutils import str2Bool
-from systems.defaults import system_defaults
-from syscore.genutils import sign
+from syscore.genutils import str2Bool, sign
+from systems.defaults import get_default_config_key_value
+from syscore.objects import missing_data
 
 LARGE_NUMBER_OF_DAYS = 250 * 100 * 100
 
@@ -111,7 +112,8 @@ def robust_vol_calc(x,
                     vol_floor=True,
                     floor_min_quant=0.05,
                     floor_min_periods=100,
-                    floor_days=500):
+                    floor_days=500,
+                    backfill = False):
     """
     Robust exponential volatility calculation, assuming daily series of prices
     We apply an absolute minimum level of vol (absmin);
@@ -169,7 +171,14 @@ def robust_vol_calc(x,
     else:
         vol_floored = vol
 
-    return vol_floored
+    if backfill:
+        # have to fill forwards first, as it's only the start we want to backfill, eg before any value available
+        vol_forward_fill = vol_floored.fillna(method = "ffill")
+        vol_backfilled = vol_forward_fill.fillna(method = "bfill")
+    else:
+        vol_backfilled = vol_floored
+
+    return vol_backfilled
 
 
 def forecast_scalar(cs_forecasts, window=250000, min_periods=500, backfill=True):
@@ -189,15 +198,21 @@ def forecast_scalar(cs_forecasts, window=250000, min_periods=500, backfill=True)
     """
     backfill = str2Bool(backfill)  # in yaml will come in as text
     # We don't allow this to be changed in config
-    target_abs_forecast = system_defaults['average_absolute_forecast']
+    target_abs_forecast = get_default_config_key_value('average_absolute_forecast')
+    if target_abs_forecast is missing_data:
+        raise Exception("average_absolute_forecast not defined in system defaults file")
+
+    ## Remove zeros/nans
+    copy_cs_forecasts = copy(cs_forecasts)
+    copy_cs_forecasts[copy_cs_forecasts==0.0] = np.nan
 
     # Take CS average first
     # we do this before we get the final TS average otherwise get jumps in
     # scalar when new markets introduced
-    if cs_forecasts.shape[1] == 1:
-        x = cs_forecasts.abs().iloc[:, 0]
+    if copy_cs_forecasts.shape[1] == 1:
+        x = copy_cs_forecasts.abs().iloc[:, 0]
     else:
-        x = cs_forecasts.ffill().abs().median(axis=1)
+        x = copy_cs_forecasts.ffill().abs().median(axis=1)
 
     # now the TS
     avg_abs_value = x.rolling(window=window, min_periods=min_periods).mean()
