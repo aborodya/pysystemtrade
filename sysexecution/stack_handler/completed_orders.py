@@ -9,10 +9,11 @@ class stackHandlerForCompletions(stackHandlerCore):
 
 
     def handle_completed_orders(self, allow_partial_completions = False,
-                                allow_zero_completions = True):
+                                allow_zero_completions = False):
         list_of_completed_instrument_orders = \
             self.instrument_stack.list_of_completed_orders(allow_partial_completions = allow_partial_completions,
                                                            allow_zero_completions = allow_zero_completions)
+
         for instrument_order_id in list_of_completed_instrument_orders:
             self.handle_completed_instrument_order(instrument_order_id,
                                                    allow_partial_completions = allow_partial_completions,
