@@ -43,7 +43,7 @@ class mongoGenericHistoricOrdersData(genericOrdersData):
 
         # this won't create the index if it already exists
         self._mongo.create_index("order_id")
-        self.log = log
+        super().__init__(log = log)
 
     @property
     def _name(self):
@@ -150,7 +150,7 @@ class mongoContractHistoricOrdersData(
         self, strategy_name, contract_object
     ):
         instrument_code = contract_object.instrument_code
-        contract_id = contract_object.date
+        contract_id = contract_object.date_str
 
         tradeable_object = contractTradeableObject(
             strategy_name, instrument_code, contract_id

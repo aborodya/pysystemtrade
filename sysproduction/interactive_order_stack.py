@@ -15,7 +15,7 @@ from syscore.genutils import (
 )
 from syscore.pdutils import set_pd_print_options
 
-from sysproduction.data.get_data import dataBlob
+from sysdata.data_blob import dataBlob
 from sysproduction.data.positions import diagPositions, dataOptimalPositions
 from sysproduction.data.broker import dataBroker
 from sysproduction.data.strategies import get_valid_strategy_name_from_user
@@ -138,6 +138,41 @@ def view_broker_order_list(data):
     broker_orders = data_broker.get_list_of_stored_orders()
     for order in broker_orders:
         print(order)
+
+def view_positions(data):
+    data_broker = dataBroker(data)
+
+    diag_positions = diagPositions(data)
+    data_optimal = dataOptimalPositions(data)
+    ans0 = data_optimal.get_pd_of_position_breaks()
+    ans1 = diag_positions.get_all_current_strategy_instrument_positions()
+    ans2 = data_broker.get_db_contract_positions_with_IB_expiries()
+    ans3 = data_broker.get_all_current_contract_positions()
+    print("Optimal vs actual")
+    print(ans0.sort_values("breaks"))
+    print("Strategy positions")
+    print(ans1.as_pd_df().sort_values("instrument_code"))
+    print("\n Contract level positions")
+    print(ans2.as_pd_df().sort_values(["instrument_code", "contract_date"]))
+    breaks = diag_positions.get_list_of_breaks_between_contract_and_strategy_positions()
+    if len(breaks) > 0:
+        print(
+            "\nBREAKS between strategy and contract positions: %s\n" %
+            str(breaks))
+    else:
+        print("(No breaks positions consistent)")
+    print("\n Broker positions")
+    print(ans3.as_pd_df().sort_values(["instrument_code", "contract_date"]))
+    breaks = data_broker.get_list_of_breaks_between_broker_and_db_contract_positions()
+    if len(breaks) > 0:
+        print(
+            "\nBREAKS between broker and DB stored contract positions: %s\n"
+            % str(breaks)
+        )
+    else:
+        print("(No breaks positions consistent)")
+    return None
+
 
 
 def spawn_contracts_from_instrument_orders(data):
@@ -764,7 +799,7 @@ def view_positions(data):
     data_optimal = dataOptimalPositions(data)
     ans0 = data_optimal.get_pd_of_position_breaks()
     ans1 = diag_positions.get_all_current_strategy_instrument_positions()
-    ans2 = diag_positions.get_all_current_contract_positions()
+    ans2 = data_broker.get_db_contract_positions_with_IB_expiries()
     ans3 = data_broker.get_all_current_contract_positions()
     print("Optimal vs actual")
     print(ans0.sort_values("breaks"))

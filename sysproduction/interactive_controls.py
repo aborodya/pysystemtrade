@@ -5,17 +5,17 @@ from syscore.genutils import (
     get_and_convert,
     print_menu_and_get_response,
 )
-from sysdata.production.override import override_dict, Override
+from sysobjects.production.override import override_dict, Override
 
-from sysproduction.data.get_data import dataBlob
+from sysdata.data_blob import dataBlob
 from sysproduction.data.controls import (
     diagOverrides,
     updateOverrides,
     dataTradeLimits,
-    diagProcessConfig,
-    dataControlProcess,
-    dataPositionLimits
+    dataPositionLimits,
+    dataBrokerClientIDs
 )
+from sysproduction.data.control_process import dataControlProcess, diagControlProcess
 from sysproduction.data.prices import get_valid_instrument_code_from_user
 from sysproduction.data.strategies import get_valid_strategy_name_from_user
 from sysproduction.data.positions import diagPositions
@@ -46,7 +46,8 @@ top_level_menu_of_options = {
     0: "Trade limits",
     1: "Position limits",
     2: "Trade control (override)",
-    3: "Process control and monitoring",
+    3: "Broker client IDS",
+    4: "Process control and monitoring",
 }
 
 nested_menu_of_options = {
@@ -71,10 +72,15 @@ nested_menu_of_options = {
         23: "Update / add / remove override for strategy & instrument",
     },
     3: {
-        30: "View process controls and status",
-        31: "Change status of process control (STOP/GO/NO RUN)",
-        32: "View process configuration (set in YAML, cannot change here)",
-        33: "Mark process as finished",
+        30: "Clear all unused client IDS"
+    },
+    4: {
+        40: "View process controls and status",
+        41: "Change status of process control (STOP/GO/NO RUN)",
+        42: "Global status change  (STOP/GO/NO RUN)",
+        43: "Mark process as finished",
+        44: "Mark all dead processes as finished",
+        45: "View process configuration (set in YAML, cannot change here)",
     },
 }
 
@@ -191,7 +197,7 @@ def calc_trade_limit_for_instrument(data, instrument_code, risk_multiplier, trad
 
     adj_trade_multiplier = (float(day_count)**.5) * trade_multiplier
     standard_trade = float(standard_position) * adj_trade_multiplier
-    standard_trade_int = max(1, int(np.ceil(abs(standard_trade))))
+    standard_trade_int = max(4, int(np.ceil(abs(standard_trade))))
 
     return standard_trade_int
 
@@ -242,6 +248,7 @@ def view_position_limit(data):
 
 
 def change_position_limit_for_instrument(data):
+    view_position_limit(data)
     data_position_limits = dataPositionLimits(data)
     instrument_code = get_valid_instrument_code_from_user(data, allow_all=False)
     new_position_limit = get_and_convert("New position limit?", type_expected=int, allow_default=True,
@@ -254,6 +261,7 @@ def change_position_limit_for_instrument(data):
 
 
 def change_position_limit_for_instrument_strategy(data):
+    view_position_limit(data)
     data_position_limits = dataPositionLimits(data)
     strategy_name = get_valid_strategy_name_from_user(data, allow_all=False)
     instrument_code = get_valid_instrument_code_from_user(data, allow_all=False)
@@ -274,6 +282,7 @@ def auto_populate_position_limits(data: dataBlob):
     return None
 
 def set_position_limit_for_instrument(data, instrument_code, risk_multiplier):
+
     data_position_limits = dataPositionLimits(data)
     max_position_int = get_max_position_for_instrument(data, instrument_code, risk_multiplier)
     if np.isnan(max_position_int):
@@ -301,6 +310,7 @@ def view_overrides(data):
 
 
 def update_strategy_override(data):
+    view_overrides(data)
     update_overrides = updateOverrides(data)
     strategy_name = get_valid_strategy_name_from_user(data=data)
     new_override = get_overide_object_from_user()
@@ -311,6 +321,7 @@ def update_strategy_override(data):
 
 
 def update_instrument_override(data):
+    view_overrides(data)
     update_overrides = updateOverrides(data)
     instrument_code = get_valid_instrument_code_from_user(data)
     new_override = get_overide_object_from_user()
@@ -321,6 +332,7 @@ def update_instrument_override(data):
 
 
 def update_strategy_instrument_override(data):
+    view_overrides(data)
     update_overrides = updateOverrides(data)
     instrument_code = get_valid_instrument_code_from_user(data)
     strategy_name = get_valid_strategy_name_from_user(data=data)
@@ -343,18 +355,24 @@ def get_overide_object_from_user():
         value = input("Your value?")
         value = float(value)
         try:
-            override_object = Override.from_float(value)
+            override_object = Override.from_numeric_value(value)
             return override_object
         except Exception as e:
             print(e)
 
 
+def clear_used_client_ids(data):
+    print("Clear all locks on broker client IDs. DO NOT DO IF ANY BROKER SESSIONS ARE ACTIVE!")
+    ans = input("Are you sure? (y/other)")
+    if ans == "y":
+        client_id_data = dataBrokerClientIDs(data)
+        client_id_data.clear_all_clientids()
+
+
 def view_process_controls(data):
     dict_of_controls = get_dict_of_process_controls(data)
     print("\nControlled processes:\n")
-    for key, value in dict_of_controls.items():
-        print("%s: %s" % (str(key), str(value)))
-    return dict_of_controls
+    print(dict_of_controls)
 
 
 def get_dict_of_process_controls(data):
@@ -365,8 +383,25 @@ def get_dict_of_process_controls(data):
 
 
 def change_process_control_status(data):
-    data_process = dataControlProcess(data)
+    view_process_controls(data)
+
     process_name = get_process_name(data)
+    status_int= get_valid_status_for_process()
+    change_process_given_int(data, process_name, status_int)
+    return None
+
+def change_global_process_control_status(data):
+    view_process_controls(data)
+    print("Status for *all* processes")
+    status_int= get_valid_status_for_process()
+    if status_int ==0:
+        return None
+    process_dict = get_dict_of_process_controls(data)
+    process_list = list(process_dict.keys())
+    for process_name in process_list:
+        change_process_given_int(data, process_name, status_int)
+
+def get_valid_status_for_process():
     status_int = print_menu_and_get_response(
         {
             1: "Go",
@@ -376,14 +411,17 @@ def change_process_control_status(data):
         default_option=0,
         default_str="<CANCEL>",
     )
+    return status_int
+
+def change_process_given_int(data, process_name, status_int):
+    data_process = dataControlProcess(data)
+
     if status_int == 1:
         data_process.change_status_to_go(process_name)
     if status_int == 2:
         data_process.change_status_to_no_run(process_name)
     if status_int == 3:
         data_process.change_status_to_stop(process_name)
-
-    return None
 
 
 def get_process_name(data):
@@ -396,7 +434,7 @@ def get_process_name(data):
 
 
 def view_process_config(data):
-    diag_config = diagProcessConfig(data)
+    diag_config = diagControlProcess(data)
     process_name = get_process_name(data)
     result_dict = diag_config.get_config_dict(process_name)
     for key, value in result_dict.items():
@@ -404,20 +442,18 @@ def view_process_config(data):
     print("\nAbove should be modified in private_config.yaml files")
 
 
-def view_strategy_config(data):
-    diag_config = diagProcessConfig(data)
-    strategy_name = get_valid_strategy_name_from_user(data=data)
-    result_dict = diag_config.get_strategy_dict_for_strategy(strategy_name)
-    for key, value in result_dict.items():
-        print("%s: %s" % (str(key), str(value)))
-    print("\nAbove should be modified in private_config.yaml files")
-
 
 def finish_process(data):
+    view_process_controls(data)
     print("Will need to use if process aborted without properly closing")
     process_name = get_process_name(data)
     data_control = dataControlProcess(data)
     data_control.finish_process(process_name)
+
+def finish_all_processes(data):
+    data_control = dataControlProcess(data)
+    data_control.check_if_pid_running_and_if_not_finish_all_processes()
+
 
 
 def not_defined(data):
@@ -439,8 +475,12 @@ dict_of_functions = {
     21: update_strategy_override,
     22: update_instrument_override,
     23: update_strategy_instrument_override,
-    30: view_process_controls,
-    31: change_process_control_status,
-    32: view_process_config,
-    33: finish_process,
+    30: clear_used_client_ids,
+    40: view_process_controls,
+    41: change_process_control_status,
+    42: change_global_process_control_status,
+    43: finish_process,
+    44: finish_all_processes,
+    45: view_process_config,
 }
+

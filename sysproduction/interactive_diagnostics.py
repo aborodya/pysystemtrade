@@ -1,5 +1,3 @@
-import pandas as pd
-
 from syscore.dateutils import get_datetime_input
 from syscore.genutils import (
     run_interactive_menu,
@@ -11,15 +9,15 @@ from syscore.pdutils import set_pd_print_options
 from syscore.objects import user_exit, arg_not_supplied
 from sysexecution.base_orders import listOfOrders
 
-from sysproduction.data.get_data import dataBlob
+from sysdata.data_blob import dataBlob
 
 from sysproduction.data.backtest import dataBacktest
 from sysproduction.data.capital import dataCapital
 from sysproduction.data.contracts import (
     get_valid_instrument_code_and_contractid_from_user,
-    diagContracts,
+    diagContracts, get_valid_contract_object_from_user
 )
-from sysproduction.data.currency_data import currencyData, get_valid_fx_code_from_user
+from sysproduction.data.currency_data import dataCurrency, get_valid_fx_code_from_user
 from sysproduction.data.instruments import diagInstruments
 from sysproduction.data.logs import diagLogs
 from sysproduction.data.orders import dataOrders
@@ -27,10 +25,9 @@ from sysproduction.data.positions import diagPositions, dataOptimalPositions
 from sysproduction.data.prices import get_valid_instrument_code_from_user, diagPrices
 from sysproduction.data.strategies import get_valid_strategy_name_from_user
 
-from sysproduction.diagnostic.emailing import retrieve_and_delete_stored_messages
+from syslogdiag.email_via_db_interface import retrieve_and_delete_stored_messages
 from sysproduction.diagnostic.reporting import run_report
 from sysproduction.diagnostic.rolls import ALL_ROLL_INSTRUMENTS
-from sysproduction.diagnostic.strategies import ALL_STRATEGIES
 from sysproduction.diagnostic.strategies import ALL_STRATEGIES
 from sysproduction.diagnostic.report_configs import (
     roll_report_config,
@@ -97,10 +94,7 @@ nested_menu_of_options = {0: {1: "Interactive python",
                               33: "FX prices",
                               },
                           4: {40: "Capital for an individual strategy",
-                              41: "Total capital: current capital",
-                              42: "Total capital: broker account valuation",
-                              43: "Total capital: maximum capital",
-                              44: "Total capital: accumulated returns",
+                              41: "Capital for global account, all strategies",
                               },
                           5: {50: "Optimal position history (instruments for strategy)",
                               51: "Actual position history (instruments for strategy)",
@@ -245,13 +239,7 @@ def get_report_dates(data):
 
 # logs emails errors
 def retrieve_emails(data):
-    subject = get_and_convert(
-        "Subject of emails (copy from emails)?",
-        type_expected=str,
-        allow_default=True,
-        default_value=None,
-    )
-    messages = retrieve_and_delete_stored_messages(data, subject=subject)
+    messages = retrieve_and_delete_stored_messages(data)
     for msg in messages:
         print(msg)
 
@@ -317,12 +305,9 @@ def build_attribute_dict(diag_logs, lookback_days):
 
 # prices
 def individual_prices(data):
-    instrument_code, contract_date = get_valid_instrument_code_and_contractid_from_user(
-        data, include_priced_contracts = True)
+    contract = get_valid_contract_object_from_user(data, include_priced_contracts=True)
     diag_prices = diagPrices(data)
-    prices = diag_prices.get_prices_for_instrument_code_and_contract_date(
-        instrument_code, contract_date
-    )
+    prices = diag_prices.get_prices_for_contract_object(contract)
 
     print(prices)
 
@@ -349,7 +334,7 @@ def adjusted_prices(data):
 
 def fx_prices(data):
     fx_code = get_valid_fx_code_from_user(data)
-    diag_prices = currencyData(data)
+    diag_prices = dataCurrency(data)
     prices = diag_prices.get_fx_prices(fx_code)
     print(prices)
 
@@ -370,30 +355,10 @@ def capital_strategy(data):
 
 def total_current_capital(data):
     data_capital = dataCapital(data)
-    capital_series = data_capital.get_series_of_total_capital()
+    capital_series = data_capital.get_series_of_all_global_capital()
     print(capital_series)
     return None
 
-
-def total_broker_capital(data):
-    data_capital = dataCapital(data)
-    capital_series = data_capital.get_series_of_broker_capital()
-    print(capital_series)
-    return None
-
-
-def total_max_capital(data):
-    data_capital = dataCapital(data)
-    capital_series = data_capital.get_series_of_maximum_capital()
-    print(capital_series)
-    return None
-
-
-def total_acc_capital(data):
-    data_capital = dataCapital(data)
-    capital_series = data_capital.get_series_of_accumulated_capital()
-    print(capital_series)
-    return None
 
 
 def optimal_positions(data):
@@ -435,7 +400,7 @@ def actual_instrument_position(data):
         return None
 
     instrument_code_list = (
-        diag_positions.get_list_of_instruments_for_strategy_with_position(strategy_name))
+        diag_positions.get_list_of_instruments_for_strategy_with_position(strategy_name, ignore_zero_positions=False))
     instrument_code = get_valid_code_from_list(instrument_code_list)
     if instrument_code is user_exit:
         return None
@@ -586,7 +551,7 @@ dict_of_functions = {
     14: reconcile_report,
     15: strategy_report,
     16: risk_report,
-    20: retrieve_and_delete_stored_messages,
+    20: retrieve_emails,
     21: view_errors,
     22: view_logs,
     30: individual_prices,
@@ -595,9 +560,6 @@ dict_of_functions = {
     33: fx_prices,
     40: capital_strategy,
     41: total_current_capital,
-    42: total_broker_capital,
-    43: total_max_capital,
-    44: total_acc_capital,
     50: optimal_positions,
     51: actual_instrument_position,
     52: actual_contract_position,

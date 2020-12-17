@@ -6,9 +6,12 @@ import types
 from collections import namedtuple
 
 from syscore.objects import header, table, body_text, arg_not_supplied, missing_data
+
+from sysobjects.contracts import futuresContract
+
 from sysproduction.data.capital import dataCapital
 
-from sysproduction.data.currency_data import currencyData
+from sysproduction.data.currency_data import dataCurrency
 from sysproduction.data.prices import diagPrices
 from sysproduction.data.orders import dataOrders
 from sysproduction.data.positions import diagPositions
@@ -126,15 +129,18 @@ def temp_pandl_read(self, instrument_code):
 def get_total_capital_series(data):
     data_capital_object = dataCapital(data)
 
-    return data_capital_object.get_series_of_maximum_capital()
+
+    return df_to_series(data_capital_object.get_series_of_maximum_capital())
 
 
 def get_strategy_capital_series(data, strategy_name):
     data_capital_object = dataCapital(data)
 
-    return data_capital_object.get_capital_pd_series_for_strategy(
-        strategy_name)
+    return df_to_series(data_capital_object.get_capital_pd_series_for_strategy(
+        strategy_name))
 
+def df_to_series(x):
+    return x._series[x.keys()[0]]
 
 def get_daily_perc_pandl(data):
     data_capital_object = dataCapital(data)
@@ -142,6 +148,7 @@ def get_daily_perc_pandl(data):
     # This is for 'non compounding' p&l
     total_pandl_series = data_capital_object.get_series_of_accumulated_capital()
     daily_pandl_series = total_pandl_series.ffill().diff()
+    daily_pandl_series = df_to_series(daily_pandl_series)
 
     all_capital = get_total_capital_series(data)
 
@@ -479,7 +486,7 @@ def get_pandl_series_in_base_ccy_for_strategy_instrument(
 def get_fx_series_for_instrument(data, instrument_code):
     diag_instruments = diagInstruments(data)
     currency = diag_instruments.get_currency(instrument_code)
-    currency_data = currencyData(data)
+    currency_data = dataCurrency(data)
     fx_series = currency_data.get_fx_prices_to_base(currency)
 
     return fx_series
@@ -533,7 +540,7 @@ def get_pandl_series_in_points_for_instrument_strategy(
     pos_series = get_position_series_for_instrument_strategy(
         data, instrument_code, strategy_name
     )
-    price_series = get_price_series_for_instrument(data, instrument_code)
+    price_series = get_current_contract_price_series_for_instrument(data, instrument_code)
     trade_df = get_trade_df_for_instrument(
         data, instrument_code, strategy_name)
 
@@ -597,17 +604,16 @@ def pandl_points(price_series, trade_df, pos_series):
 
 def get_price_series_for_contract(data, instrument_code, contract_id):
     diag_prices = diagPrices(data)
-    all_prices = diag_prices.get_prices_for_instrument_code_and_contract_date(
-        instrument_code, contract_id
-    )
+    contract = futuresContract(instrument_code, contract_id)
+    all_prices = diag_prices.get_prices_for_contract_object(contract)
     price_series = all_prices.return_final_prices()
 
     return price_series
 
 
-def get_price_series_for_instrument(data, instrument_code):
+def get_current_contract_price_series_for_instrument(data, instrument_code):
     diag_prices = diagPrices(data)
-    price_series = diag_prices.get_prices_for_instrument(instrument_code)
+    price_series = diag_prices.get_current_contract_prices_for_instrument(instrument_code)
 
     return price_series
 

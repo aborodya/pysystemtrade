@@ -1,42 +1,14 @@
-from syscore.genutils import NOT_REQUIRED
-from ib_insync import Future
 import re
 
-
-def ib_futures_instrument_just_symbol(symbol):
-    ibcontract = Future(symbol=symbol)
-    return ibcontract
-
-
-def ib_futures_instrument(futures_instrument_object):
-    """
-    Get an IB contract which is NOT specific to a contract date
-    Used for getting expiry chains
-
-    :param futures_instrument_object: instrument with .metadata suitable for IB
-    :return: IBcontract
-    """
-
-    meta_data = futures_instrument_object.meta_data
-
-    ibcontract = Future(meta_data["symbol"], exchange=meta_data["exchange"])
-    if meta_data["ibMultiplier"] is NOT_REQUIRED:
-        pass
-    else:
-        ibcontract.multiplier = int(meta_data["ibMultiplier"])
-    if meta_data["currency"] is NOT_REQUIRED:
-        pass
-    else:
-        ibcontract.currency = meta_data["currency"]
-
-    return ibcontract
+from sysbrokers.IB.ib_instruments import futuresInstrumentWithIBConfigData
 
 
 def resolve_multiple_expiries(
         ibcontract_list,
-        instrument_object_with_metadata):
-    code = instrument_object_with_metadata.instrument_code
-    ignore_weekly = instrument_object_with_metadata.meta_data["ignoreWeekly"]
+        futures_instrument_with_ib_data: futuresInstrumentWithIBConfigData):
+    code = futures_instrument_with_ib_data.instrument_code
+    ib_data = futures_instrument_with_ib_data.ib_data
+    ignore_weekly = ib_data.ignoreWeekly
     if not ignore_weekly:
         # Can't be resolved
         raise Exception(

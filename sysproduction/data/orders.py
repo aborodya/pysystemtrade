@@ -1,13 +1,14 @@
 from syscore.objects import (
     arg_not_supplied,
     missing_data,
-    success,
-    failure,
     no_parent,
     missing_order,
 )
 
-from sysproduction.data.get_data import dataBlob
+from sysdata.mongodb.mongo_order_stack import mongoInstrumentOrderStackData, mongoContractOrderStackData, mongoBrokerOrderStackData
+from sysdata.mongodb.mongo_historic_orders import mongoStrategyHistoricOrdersData, mongoContractHistoricOrdersData, mongoBrokerHistoricOrdersData
+
+from sysdata.data_blob import dataBlob
 
 
 class dataOrders(object):
@@ -15,11 +16,9 @@ class dataOrders(object):
         # Check data has the right elements to do this
         if data is arg_not_supplied:
             data = dataBlob()
-        data.add_class_list(
-            "mongoInstrumentOrderStackData mongoContractOrderStackData mongoBrokerOrderStackData"
-        )
-        data.add_class_list(
-            "mongoContractHistoricOrdersData mongoStrategyHistoricOrdersData mongoBrokerHistoricOrdersData"
+        data.add_class_list([mongoInstrumentOrderStackData, mongoContractOrderStackData,
+                             mongoBrokerOrderStackData, mongoContractHistoricOrdersData,
+                             mongoStrategyHistoricOrdersData, mongoBrokerHistoricOrdersData]
         )
         self.data = data
 

@@ -9,12 +9,12 @@ this:
 
 """
 
-from syscore.objects import success, missing_data
+from syscore.objects import success, missing_data, arg_not_supplied
 
 from sysdata.configdata import Config
-from sysdata.production.optimal_positions import bufferedOptimalPositions
+from sysobjects.production.optimal_positions import bufferedOptimalPositions
 
-from sysproduction.data.currency_data import currencyData
+from sysproduction.data.currency_data import dataCurrency
 from sysproduction.data.capital import dataCapital
 from sysproduction.data.contracts import diagContracts
 from sysproduction.data.positions import dataOptimalPositions
@@ -32,13 +32,16 @@ class runSystemClassic(object):
         self,
         data,
         strategy_name,
-        backtest_config_filename="systems.provided.futures_chapter15.futures_config.yaml",
+        backtest_config_filename=arg_not_supplied,
     ):
         self.data = data
         self.strategy_name = strategy_name
         self.backtest_config_filename = backtest_config_filename
 
-    def run_system_classic(self):
+        if backtest_config_filename is arg_not_supplied:
+            raise Exception("Need to supply config")
+
+    def run_backtest(self):
         strategy_name = self.strategy_name
         data = self.data
 
@@ -52,7 +55,7 @@ class runSystemClassic(object):
             data.log.critical(error_msg)
             raise Exception(error_msg)
 
-        currency_data = currencyData(data)
+        currency_data = dataCurrency(data)
         base_currency = currency_data.get_base_currency()
 
         system = self.system_method(
@@ -90,8 +93,7 @@ def production_classic_futures_system(
 
     log_level = "on"
 
-    # ugly but once you've established a pattern...
-    sim_data = dataSimData(data).sim_data()
+    sim_data = dataSimData(data)
     config = Config(config_filename)
 
     # Overwrite capital
@@ -102,7 +104,7 @@ def production_classic_futures_system(
         config.base_currency = base_currency
 
     system = futures_system(data=sim_data, config=config)
-    system.log = log
+    system._log = log
 
     system.set_logging_level(log_level)
 
@@ -116,26 +118,20 @@ def updated_buffered_positions(data, strategy_name, system):
 
     list_of_instruments = system.get_instrument_list()
     for instrument_code in list_of_instruments:
-        try:
-            lower_buffer, upper_buffer = get_position_buffers_from_system(
-                system, instrument_code
-            )
-            position_entry = construct_position_entry(
-                data, system, instrument_code, lower_buffer, upper_buffer
-            )
-            data_optimal_positions.update_optimal_position_for_strategy_and_instrument(
-                strategy_name, instrument_code, position_entry)
-            log.msg(
-                "New buffered positions %.3f %.3f" %
-                (position_entry.lower_position,
-                 position_entry.upper_position),
-                instrument_code=instrument_code,
-            )
-        except Exception as e:
-            log.critical(
-                "Couldn't get or update buffered positions error %s" % e,
-                instrument_code=instrument_code,
-            )
+        lower_buffer, upper_buffer = get_position_buffers_from_system(
+            system, instrument_code
+        )
+        position_entry = construct_position_entry(
+            data, system, instrument_code, lower_buffer, upper_buffer
+        )
+        data_optimal_positions.update_optimal_position_for_strategy_and_instrument(
+            strategy_name, instrument_code, position_entry)
+        log.msg(
+            "New buffered positions %.3f %.3f" %
+            (position_entry.lower_position,
+             position_entry.upper_position),
+            instrument_code=instrument_code,
+        )
 
     return success
 

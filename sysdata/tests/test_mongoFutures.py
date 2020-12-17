@@ -1,12 +1,9 @@
 import unittest
 from sysdata.mongodb.mongo_futures_instruments import mongoFuturesInstrumentData
-from sysdata.futures.rolls import rollParameters
+from sysdata.futures.rolls_parameters import rollParametersTOMOVE
 from sysdata.mongodb.mongo_roll_data import mongoRollParametersData
 
-from sysdata.mongodb.mongo_futures_contracts import mongoFuturesContractData
-from sysdata.futures.instruments import futuresInstrument
-from sysdata.futures.contracts import futuresContract
-from sysdata.futures.contract_dates_and_expiries import contractDate
+from sysobjects.instruments import futuresInstrument
 
 
 class MyTestCase(unittest.TestCase):
@@ -60,10 +57,10 @@ class MyTestCase(unittest.TestCase):
 
         self.assertTrue(roll_object.empty())
 
-        roll_object = rollParameters(
+        roll_object = rollParametersTOMOVE(
             hold_rollcycle="HMUZ",
             priced_rollcycle="HM")
-        data.add_roll_parameters(roll_object, "EDOLLAR")
+        data.add_roll_parameters("EDOLLAR", roll_object)
 
         self.assertEqual(data.get_list_of_instruments(), ["EDOLLAR"])
 

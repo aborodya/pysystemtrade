@@ -1,3 +1,4 @@
+import pandas as pd
 from arctic import Arctic
 from sysdata.mongodb.mongo_connection import mongoDb
 
@@ -9,7 +10,7 @@ This connection won't fail if mongo missing, but will hang
 """
 
 
-class articConnection(object):
+class articData(object):
     """
     All of our ARCTIC mongo connections use this class (not static data which goes directly via mongo DB)
 
@@ -45,3 +46,16 @@ class articConnection(object):
             self.database_name,
             self.collection_name,
         )
+
+    def read(self, ident) -> pd.DataFrame:
+        item = self.library.read(ident)
+        return pd.DataFrame(item.data)
+
+    def write(self, ident: str, data: pd.DataFrame):
+        self.library.write(ident, data)
+
+    def get_keynames(self) -> list:
+        return self.library.list_symbols()
+
+    def delete(self, ident: str):
+        self.library.delete(ident)

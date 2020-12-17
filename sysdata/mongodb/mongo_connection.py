@@ -3,6 +3,7 @@ from copy import copy
 import numpy as np
 
 from syscore.genutils import get_safe_from_dict
+from syscore.objects import arg_not_supplied
 from sysdata.private_config import get_list_of_private_then_default_key_values
 
 LIST_OF_MONGO_PARAMS = ["db", "host"]
@@ -10,9 +11,9 @@ LIST_OF_MONGO_PARAMS = ["db", "host"]
 # DO NOT CHANGE THIS VALUE!!!! IT WILL SCREW UP ARCTIC
 DEFAULT_MONGO_PORT = 27017
 
-MONGO_ID_STR = "_id_"
-MONGO_ID_KEY = "_id"
 
+MONGO_INDEX_ID = "_id_"
+MONGO_ID_KEY = "_id"
 
 def mongo_defaults(**kwargs):
     """
@@ -49,7 +50,32 @@ def mongo_defaults(**kwargs):
     return mongo_db, hostname, port
 
 
-class mongoDb(object):
+class MongoClientFactory(object):
+    """
+    Only one MongoClient is needed per Python process and MongoDB instance.
+
+    I'm not sure why anyone would need more than one MongoDB instance,
+    but it's easy to support, so why not?
+    """
+
+    def __init__(self):
+        self.mongo_clients = {}
+
+    def get_mongo_client(self, host, port):
+        key = (host, port)
+        if key in self.mongo_clients:
+            return self.mongo_clients.get(key)
+        else:
+            client = MongoClient(host=host, port=port)
+            self.mongo_clients[key] = client
+            return client
+
+
+# Only need one of these
+mongo_client_factory = MongoClientFactory()
+
+
+class mongoDb():
     """
     Keeps track of mongo database we are connected to
 
@@ -64,7 +90,7 @@ class mongoDb(object):
         self.host = host
         self.port = port
 
-        client = MongoClient(host=host, port=port)
+        client = mongo_client_factory.get_mongo_client(host, port)
         db = client[database_name]
 
         self.client = client
@@ -77,9 +103,6 @@ class mongoDb(object):
             self.database_name,
         )
 
-    def close(self):
-        self.client.close()
-
 
 class mongoConnection(object):
     """
@@ -87,9 +110,10 @@ class mongoConnection(object):
 
     """
 
-    def __init__(self, collection_name, mongo_db=None):
+    def __init__(self, collection_name: str, mongo_db: mongoDb=arg_not_supplied):
 
-        if mongo_db is None:
+        # FIXME REMOVE NONE WHEN CODE PROPERLY REFACTORED
+        if mongo_db is arg_not_supplied or mongo_db is None:
             mongo_db = mongoDb()
 
         database_name = mongo_db.database_name
@@ -109,9 +133,6 @@ class mongoConnection(object):
         self.db = db
         self.collection = collection
 
-    def close(self):
-        self.client.close()
-
     def __repr__(self):
         return "Mongodb connection: host %s, port %d, db name %s, collection %s" % (
             self.host, self.port, self.database_name, self.collection_name, )
@@ -124,7 +145,7 @@ class mongoConnection(object):
             return []
 
         # '__id__' is always in index if there is data
-        raw_index_information.pop(MONGO_ID_STR)
+        raw_index_information.pop(MONGO_INDEX_ID)
 
         # mongo have buried this deep...
         index_keys = [index_entry["key"][0][0]
@@ -158,7 +179,6 @@ class mongoConnection(object):
                 name=joint_indexname,
             )
 
-
 def mongo_clean_ints(dict_to_clean):
     """
     Mongo doesn't like ints
@@ -173,19 +193,5 @@ def mongo_clean_ints(dict_to_clean):
             key_value = float(key_value)
 
         new_dict[key_name] = key_value
-
-    return new_dict
-
-
-def create_update_dict(mongo_record_dict):
-    """
-    Mongo needs $key names to do updates
-
-    :param mongo_record_dict: dict
-    :return: dict
-    """
-
-    new_dict = [("$%s" % key, value)
-                for key, value in mongo_record_dict.items()]
 
     return new_dict

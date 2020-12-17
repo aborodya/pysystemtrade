@@ -12,7 +12,7 @@ from syscore.genutils import transfer_object_attributes
 from syscore.pdutils import make_df_from_list_of_named_tuple
 from syscore.objects import header, table, body_text, arg_not_supplied, missing_data
 
-from sysproduction.data.get_data import dataBlob
+from sysdata.data_blob import dataBlob
 from sysproduction.data.orders import dataOrders
 from sysproduction.data.positions import diagPositions
 from sysproduction.data.broker import dataBroker
@@ -107,8 +107,8 @@ def get_optimal_positions(data):
 
 
 def get_my_positions(data):
-    diag_positions = diagPositions(data)
-    my_positions = diag_positions.get_all_current_contract_positions().as_pd_df()
+    data_broker = dataBroker(data)
+    my_positions = data_broker.get_db_contract_positions_with_IB_expiries().as_pd_df()
     my_positions = my_positions.sort_values("instrument_code")
 
     return my_positions

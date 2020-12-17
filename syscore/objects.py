@@ -4,6 +4,19 @@ Do fun things with objects and classes
 from collections import namedtuple
 import importlib
 
+class Singleton(object):
+    _instance = None
+    def __new__(class_, *args, **kwargs):
+        if not isinstance(class_._instance, class_):
+            class_._instance = object.__new__(class_, *args, **kwargs)
+        return class_._instance
+
+class missingData(Exception):
+    pass
+
+class existingData(Exception):
+    pass
+
 
 class _named_object:
     def __init__(self, name):
@@ -45,12 +58,10 @@ ROLL_PSEUDO_STRATEGY = "_ROLL_PSEUDO_STRATEGY"
 data_error = _named_object("data error")
 not_updated = _named_object("not updated")
 
-success = _named_object("success")
-failure = _named_object("failure")
-
-process_stop = _named_object("process stop")
-process_no_run = _named_object("process no run")
-process_running = _named_object("process running")
+class status(_named_object):
+    pass
+success = status("success")
+failure = status("failure")
 
 arg_not_supplied = _named_object("arg not supplied")
 user_exit = _named_object("exit")
