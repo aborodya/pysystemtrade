@@ -136,7 +136,7 @@ def change_limit_for_instrument_strategy(data):
         type_expected=int,
         allow_default=True,
         default_value=1)
-    strategy_name = get_valid_strategy_name_from_user(data=data)
+    strategy_name = get_valid_strategy_name_from_user(data=data, source="positions")
     new_limit = get_and_convert(
         "Limit (in contracts?)", type_expected=int, allow_default=False
     )
@@ -158,7 +158,7 @@ def reset_limit_for_instrument_strategy(data):
         type_expected=int,
         allow_default=True,
         default_value=1)
-    strategy_name = get_valid_strategy_name_from_user(data=data)
+    strategy_name = get_valid_strategy_name_from_user(data=data, source="positions")
 
     ans = input(
         "Reset means trade 'clock' will restart. Are you sure? (y/other)")
@@ -233,6 +233,7 @@ def get_standardised_position(data: dataBlob, instrument_code: str, risk_multipl
 
 
 def view_position_limit(data):
+    # FIXME NICER ORDE
     data_position_limits = dataPositionLimits(data)
     instrument_limits = data_position_limits.get_all_instrument_limits_and_positions()
     strategy_instrument_limits = data_position_limits.get_all_strategy_instrument_limits_and_positions()
@@ -263,13 +264,13 @@ def change_position_limit_for_instrument(data):
 def change_position_limit_for_instrument_strategy(data):
     view_position_limit(data)
     data_position_limits = dataPositionLimits(data)
-    strategy_name = get_valid_strategy_name_from_user(data, allow_all=False)
+    strategy_name = get_valid_strategy_name_from_user(data, allow_all=False, source="positions")
     instrument_code = get_valid_instrument_code_from_user(data, allow_all=False)
     new_position_limit = get_and_convert("New position limit?", type_expected=int, allow_default=True,
                                          default_value=-1, default_str = "No limit")
 
     if new_position_limit==-1:
-        data_position_limits.delete_abs_position_limit_for_strategy_instrument(strategy_name, instrument_code)
+        data_position_limits.delete_position_limit_for_strategy_instrument(strategy_name, instrument_code)
     else:
         new_position_limit = abs(new_position_limit)
         data_position_limits.set_abs_position_limit_for_strategy_instrument(strategy_name, instrument_code, new_position_limit)
@@ -312,7 +313,7 @@ def view_overrides(data):
 def update_strategy_override(data):
     view_overrides(data)
     update_overrides = updateOverrides(data)
-    strategy_name = get_valid_strategy_name_from_user(data=data)
+    strategy_name = get_valid_strategy_name_from_user(data=data, source="positions")
     new_override = get_overide_object_from_user()
     ans = input("Are you sure? (y/other)")
     if ans == "y":
@@ -335,7 +336,7 @@ def update_strategy_instrument_override(data):
     view_overrides(data)
     update_overrides = updateOverrides(data)
     instrument_code = get_valid_instrument_code_from_user(data)
-    strategy_name = get_valid_strategy_name_from_user(data=data)
+    strategy_name = get_valid_strategy_name_from_user(data=data, source="positions")
     new_override = get_overide_object_from_user()
     ans = input("Are you sure? (y/other)")
     if ans == "y":

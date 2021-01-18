@@ -9,7 +9,7 @@ from sysdata.mongodb.mongo_connection import (
 from syscore.objects import missing_data, missingData, existingData
 
 
-class mongoData(object):
+class mongoDataWithSingleKey(object):
     """
     Read and write data class to get data from a mongo database
 
@@ -148,12 +148,12 @@ class mongoDataWithMultipleKeys(object):
     def __repr__(self):
         return self.name
 
-    @property
+    @propertys
     def name(self) -> str:
         mongo_object = self._mongo
         name = (
-            "mongoData connection for %s, mongodb %s/%s @ %s -p %s " %
-            (mongo_object.collection_name,
+            "mongoData connection for mongodb %s/%s @ %s -p %s " %
+            (
             mongo_object.database_name,
              mongo_object.collection_name,
              mongo_object.host,
