@@ -3,14 +3,14 @@ Read and write data from mongodb for 'multiple prices'
 
 """
 import pandas as pd
-from sysdata.arctic.arctic_connection import articData
+from sysdata.arctic.arctic_connection import arcticData
 from sysdata.futures.multiple_prices import (
     futuresMultiplePricesData,
 )
 from sysobjects.multiple_prices import futuresMultiplePrices
 from sysobjects.dict_of_named_futures_per_contract_prices import list_of_price_column_names, \
      contract_name_from_column_name
-from syslogdiag.log import logtoscreen
+from syslogdiag.log_to_screen import logtoscreen
 
 MULTIPLE_COLLECTION = "futures_multiple_prices"
 
@@ -26,7 +26,7 @@ class arcticFuturesMultiplePricesData(futuresMultiplePricesData):
 
         super().__init__(log=log)
 
-        self._arctic = articData(MULTIPLE_COLLECTION, mongo_db=mongo_db)
+        self._arctic = arcticData(MULTIPLE_COLLECTION, mongo_db=mongo_db)
 
 
     def __repr__(self):

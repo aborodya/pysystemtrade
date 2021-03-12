@@ -1,9 +1,9 @@
 from sysobjects.production.process_control import controlProcess
 from sysdata.production.process_control_data import controlProcessData
-from syscore.objects import missing_data, arg_not_supplied
+from syscore.objects import arg_not_supplied, missing_data
 
 from sysdata.mongodb.mongo_generic import mongoDataWithSingleKey
-from syslogdiag.log import logtoscreen
+from syslogdiag.log_to_screen import logtoscreen
 
 PROCESS_CONTROL_COLLECTION = "process_control"
 PROCESS_CONTROL_KEY = "process_name"

@@ -1,5 +1,33 @@
 # Release notes
 
+## Version 0.85
+**WARNING! FROM VERSION 0.85.0 IS A MAJOR UPGRADE. SEE [pandas_upgrade](pandas_upgrade.md) BEFORE DOING ANYTHING!
+
+Upgraded pandas and arctic versions
+Added 'Pause' process status
+Refactored and tidied control code
+Control process now sleep when not needed to save energy
+Removed option to specify machine to run process on
+
+## Version 0.80
+
+Finished refactoring of production code (or at least, for now!)
+sysproduction/diagnostics now renamed reporting
+sysproduction/data code now uses generic handler and property methods to access data
+broker API now has proper base classes
+Tinkered with requirements to get running on new machine
+
+## Version 0.75
+
+Moved defaults.yaml to /sysdata/config directory
+Removed 'example' strategy from config files - strategies need to be explicit in private yaml config
+Cleaned up configuration code. Production config now accessed through data blob where possible.
+Messed up order database by changing formats; let me know if you have any issues reading your old orders
+
+## Version 0.70
+
+Massive refactoring mainly of order code but also IB client structure. Should be backwardly compatible with old saved orders except 'split' orders which are ignored. Read 'journey of an order' in production code for granular detail. 
+
 added remote monitoring
 
 ## Version 0.60.0

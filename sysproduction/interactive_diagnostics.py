@@ -7,15 +7,18 @@ from syscore.genutils import (
 )
 from syscore.pdutils import set_pd_print_options
 from syscore.objects import user_exit, arg_not_supplied
-from sysexecution.base_orders import listOfOrders
+from sysexecution.orders.list_of_orders import listOfOrders
 
 from sysdata.data_blob import dataBlob
 
-from sysproduction.data.backtest import dataBacktest
+from sysobjects.contracts import futuresContract
+from sysobjects.production.tradeable_object import instrumentStrategy
+
+from sysproduction.data.backtest import user_choose_backtest, interactively_choose_timestamp
 from sysproduction.data.capital import dataCapital
 from sysproduction.data.contracts import (
     get_valid_instrument_code_and_contractid_from_user,
-    diagContracts, get_valid_contract_object_from_user
+    dataContracts, get_valid_contract_object_from_user
 )
 from sysproduction.data.currency_data import dataCurrency, get_valid_fx_code_from_user
 from sysproduction.data.instruments import diagInstruments
@@ -24,12 +27,15 @@ from sysproduction.data.orders import dataOrders
 from sysproduction.data.positions import diagPositions, dataOptimalPositions
 from sysproduction.data.prices import get_valid_instrument_code_from_user, diagPrices
 from sysproduction.data.strategies import get_valid_strategy_name_from_user
+from sysproduction.data.contracts import dataContracts
+from sysproduction.data.broker import dataBroker
+
 
 from syslogdiag.email_via_db_interface import retrieve_and_delete_stored_messages
-from sysproduction.diagnostic.reporting import run_report
-from sysproduction.diagnostic.rolls import ALL_ROLL_INSTRUMENTS
-from sysproduction.diagnostic.strategies import ALL_STRATEGIES
-from sysproduction.diagnostic.report_configs import (
+from sysproduction.reporting.reporting_functions import run_report
+from sysproduction.reporting.roll_report import ALL_ROLL_INSTRUMENTS
+from sysproduction.reporting.strategies_report import ALL_STRATEGIES
+from sysproduction.reporting.report_configs import (
     roll_report_config,
     daily_pandl_report_config,
     status_report_config,
@@ -38,6 +44,8 @@ from sysproduction.diagnostic.report_configs import (
     strategy_report_config,
     risk_report_config
 )
+
+
 
 
 def interactive_diagnostics():
@@ -106,6 +114,7 @@ nested_menu_of_options = {0: {1: "Interactive python",
                               },
                           6: {60: "View instrument configuration data",
                               61: "View contract configuration data",
+                              62: "View trading hours for all instruments"
                               },
                           }
 
@@ -115,27 +124,28 @@ def not_defined(data):
 
 
 def backtest_plot(data):
-    data_backtests = dataBacktest(data)
+    data_backtests = user_choose_backtest(data)
     data_backtests.plot_data_loop()
     return None
 
 
 def backtest_python(data):
-    data_backtests = dataBacktest(data)
+    data_backtests = user_choose_backtest(data)
     data_backtests.eval_loop()
     return None
 
 
 def backtest_print(data):
-    data_backtests = dataBacktest(data)
+    data_backtests = user_choose_backtest(data)
     data_backtests.print_data_loop()
     return None
 
 
 def backtest_html(data):
-    data_backtests = dataBacktest(data)
+    data_backtests = user_choose_backtest(data)
     data_backtests.html_data_loop()
     return None
+
 
 
 # reports
@@ -182,9 +192,8 @@ def strategy_report(data):
         data=data, allow_all=True, all_code = ALL_STRATEGIES
     )
     if strategy_name != ALL_STRATEGIES:
-        data_backtests = dataBacktest(data)
-        timestamp = data_backtests.interactively_choose_timestamp(
-            strategy_name)
+        timestamp = interactively_choose_timestamp(strategy_name=strategy_name,
+            data=data)
     else:
         timestamp = arg_not_supplied
 
@@ -269,8 +278,7 @@ def view_logs(data):
     log_item_list = diag_logs.get_log_items(
         attribute_dict=attribute_dict, lookback_days=lookback_days
     )
-    print(log_item_list)
-
+    print_log_items(log_item_list)
 
 def print_log_items(log_item_list):
     for log_item in log_item_list:
@@ -288,7 +296,7 @@ def build_attribute_dict(diag_logs, lookback_days):
         print("Which attribute to filter by?")
         attribute_name = print_menu_of_values_and_get_response(
             list_of_attributes)
-        list_of_attribute_values = diag_logs.get_list_of_values_for_log_attribute(
+        list_of_attribute_values = diag_logs.get_unique_list_of_values_for_log_attribute(
             attribute_name, attribute_dict=attribute_dict, lookback_days=lookback_days)
         print("Which value for %s ?" % attribute_name)
         attribute_value = print_menu_of_values_and_get_response(
@@ -305,7 +313,7 @@ def build_attribute_dict(diag_logs, lookback_days):
 
 # prices
 def individual_prices(data):
-    contract = get_valid_contract_object_from_user(data, include_priced_contracts=True)
+    contract = get_valid_contract_object_from_user(data, only_include_priced_contracts=True)
     diag_prices = diagPrices(data)
     prices = diag_prices.get_prices_for_contract_object(contract)
 
@@ -373,10 +381,10 @@ def optimal_positions(data):
     instrument_code = get_valid_code_from_list(instrument_code_list)
     if instrument_code is user_exit:
         return None
-
-    data_series = optimal_data.get_optimal_position_as_df_for_strategy_and_instrument(
-        strategy_name, instrument_code)
+    instrument_strategy = instrumentStrategy(instrument_code=instrument_code, strategy_name=strategy_name)
+    data_series = optimal_data.get_optimal_position_as_df_for_instrument_strategy(instrument_strategy)
     print(data_series)
+
     return None
 
 
@@ -404,10 +412,9 @@ def actual_instrument_position(data):
     instrument_code = get_valid_code_from_list(instrument_code_list)
     if instrument_code is user_exit:
         return None
+    instrument_strategy = instrumentStrategy(strategy_name=strategy_name, instrument_code=instrument_code)
 
-    pos_series = diag_positions.get_position_df_for_strategy_and_instrument(
-        strategy_name, instrument_code
-    )
+    pos_series = diag_positions.get_position_df_for_instrument_strategy(instrument_strategy)
     print(pos_series)
     return None
 
@@ -425,13 +432,13 @@ def actual_contract_position(data):
             instrument_code
         )
     )
-    contract_code = get_valid_code_from_list(contract_code_list)
-    if contract_code is user_exit:
+    contract_date_str = get_valid_code_from_list(contract_code_list)
+    if contract_date_str is user_exit:
         return None
+    # ignore warnings can be str
+    contract = futuresContract(instrument_code, contract_date_str)
 
-    pos_series = diag_positions.get_position_df_for_instrument_and_contract_id(
-        instrument_code, contract_code
-    )
+    pos_series = diag_positions.get_position_df_for_contract(contract)
     print(pos_series)
     return None
 
@@ -510,8 +517,11 @@ def view_individual_order(data):
         order = data_orders.get_historic_contract_order_from_order_id(order_id)
     elif order_type == list_of_order_types[2]:
         order = data_orders.get_historic_broker_order_from_order_id(order_id)
+    else:
+        print("Don't know what to do")
+        return None
 
-    print(order)
+    print(order.full_repr())
 
     return None
 
@@ -528,8 +538,8 @@ def view_instrument_config(data):
 def view_contract_config(data):
     instrument_code, contract_id = get_valid_instrument_code_and_contractid_from_user(
         data)
-    diag_contracts = diagContracts(data)
-    contract_object = diag_contracts.get_contract_object(
+    diag_contracts = dataContracts(data)
+    contract_object = diag_contracts.get_contract_from_db_given_code_and_id(
         instrument_code, contract_id)
     contract_date = diag_contracts.get_contract_date_object_with_roll_parameters(
         instrument_code, contract_id)
@@ -537,6 +547,42 @@ def view_contract_config(data):
     print(contract_date.roll_parameters)
 
     return None
+
+
+
+def print_trading_hours_for_all_instruments(data=arg_not_supplied):
+    all_trading_hours = get_trading_hours_for_all_instruments(data)
+    for key, value in sorted(all_trading_hours.items(), key=lambda x: x[0]):
+        print("{} : {}".format(key, value))
+
+
+
+def get_trading_hours_for_all_instruments(data=arg_not_supplied):
+    if data is arg_not_supplied:
+        data = dataBlob()
+
+    diag_prices = diagPrices()
+    list_of_instruments = diag_prices.get_list_of_instruments_with_contract_prices()
+
+    all_trading_hours = {}
+    for instrument_code in list_of_instruments:
+        trading_hours = get_trading_hours_for_instrument(data, instrument_code)
+        all_trading_hours[instrument_code] = trading_hours[:1]
+
+    return all_trading_hours
+
+
+def get_trading_hours_for_instrument(data, instrument_code):
+
+    diag_contracts = dataContracts(data)
+    contract_id = diag_contracts.get_priced_contract_id(instrument_code)
+
+    contract = futuresContract(instrument_code, contract_id)
+
+    data_broker = dataBroker(data)
+    trading_hours = data_broker.get_trading_hours_for_contract(contract)
+
+    return trading_hours
 
 
 dict_of_functions = {
@@ -569,4 +615,5 @@ dict_of_functions = {
     56: view_individual_order,
     60: view_instrument_config,
     61: view_contract_config,
+    62: print_trading_hours_for_all_instruments
 }

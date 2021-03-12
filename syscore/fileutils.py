@@ -7,16 +7,25 @@ import sys
 from syscore.dateutils import SECONDS_PER_DAY
 
 # all these are unused: but are required to get the filename padding to work
-import syscore
-import sysdata
-import systems
-import sysinit
 import examples
 import private
 import data
 import sysbrokers
+import syscontrol
+import syscore
+import sysdata
+import sysexecution
+import sysinit
+import syslogdiag
+import sysobjects
 import sysproduction
+import sysquant
+import systems
 
+def does_file_exist(filename:str):
+    resolved_filename = get_filename_for_package(filename)
+    file_exists = os.path.isfile(resolved_filename)
+    return file_exists
 
 def get_filename_for_package(pathname:str, filename=None):
     """

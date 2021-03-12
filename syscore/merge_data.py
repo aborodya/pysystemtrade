@@ -1,12 +1,11 @@
 ## Merge series together
-from dataclasses import dataclass
 from copy import copy
 import pandas as pd
 import datetime
 
 from syscore.dateutils import SECONDS_PER_DAY
-from syscore.objects import arg_not_supplied, _named_object
-from sysdata.private_config import get_private_then_default_key_value
+from syscore.objects import arg_not_supplied, named_object
+from sysdata.config.production_config import get_production_config
 
 class mergeStatus(object):
     def __init__(self, text):
@@ -109,10 +108,12 @@ def merge_newer_data_no_checks(old_data, new_data)-> mergingDataWithStatus:
 
     :return:  status ,last_date_in_old_data: datetime.datetime, merged_data: pd.Series or DataFrame
     """
-    if len(old_data.index) == 0:
-        return mergingDataWithStatus.only_old_data(old_data)
+
     if len(new_data.index) == 0:
+        return mergingDataWithStatus.only_old_data(old_data)
+    if len(old_data.index) == 0:
         return mergingDataWithStatus.only_new_data(new_data)
+
 
     merged_data_with_status = _merge_newer_data_no_checks_if_both_old_and_new(old_data, new_data)
 
@@ -239,8 +240,11 @@ def _get_change_in_avg_units_to_check(change_in_avg_units: pd.Series, first_date
 
     return change_in_avg_units_to_check
 
+production_config = get_production_config()
+max_spike = production_config.max_price_spike
+
+
 def _check_for_spikes_in_change_in_avg_units(change_in_avg_units_to_check: pd.Series):
-    max_spike = get_private_then_default_key_value("max_price_spike")
 
     if any(change_in_avg_units_to_check > max_spike):
         first_spike=change_in_avg_units_to_check.index[change_in_avg_units_to_check > max_spike][0]
@@ -306,9 +310,9 @@ def full_merge_of_existing_series(old_series, new_series):
     return merged_data
 
 
-all_labels_match = _named_object("all labels match")
-mismatch_on_last_day = _named_object("mismatch_on_last_day")
-original_index_matches_new = _named_object("original index matches new")
+all_labels_match = named_object("all labels match")
+mismatch_on_last_day = named_object("mismatch_on_last_day")
+original_index_matches_new = named_object("original index matches new")
 
 
 def merge_data_series_with_label_column(

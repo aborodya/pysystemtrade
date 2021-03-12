@@ -1,17 +1,17 @@
-from sysdata.base_data import baseData
+from syscore.dateutils import Frequency, DAILY_PRICE_FREQ
 from syscore.merge_data import spike_in_data
+
+from sysdata.base_data import baseData
 
 from sysobjects.contracts import futuresContract, listOfFuturesContracts
 from sysobjects.contract_dates_and_expiries import listOfContractDateStr
 from sysobjects.futures_per_contract_prices import futuresContractPrices
 from sysobjects.dict_of_futures_per_contract_prices import dictFuturesContractPrices
 
-from syslogdiag.log import logtoscreen
+from syslogdiag.log_to_screen import logtoscreen
 
 BASE_CLASS_ERROR = "You have used a base class for futures price data; you need to use a class that inherits with a specific data source"
 
-PRICE_FREQ =  ['D', 'H', '5M', 'M', '10S', 'S']
-DAILY_PRICE_FREQ = 'D'
 
 class futuresContractPriceData(baseData):
     """
@@ -95,8 +95,8 @@ class futuresContractPriceData(baseData):
             str(contract.date_str)
             for contract in list_of_contracts_with_price_data
         ]
-
-        return listOfContractDateStr(contract_dates)
+        list_of_contract_date_str =listOfContractDateStr(contract_dates)
+        return list_of_contract_date_str
 
 
     def get_all_prices_for_instrument(self, instrument_code: str) ->dictFuturesContractPrices:
@@ -123,29 +123,29 @@ class futuresContractPriceData(baseData):
 
     def get_prices_for_contract_object(self, contract_object: futuresContract):
         """
-        get some prices
+        get all prices without worrying about frequency
 
         :param contract_object:  futuresContract
         :return: data
         """
 
         if self.has_data_for_contract(contract_object):
-            return self._get_prices_for_contract_object_no_checking(
+            prices = self._get_prices_for_contract_object_no_checking(
                 contract_object)
         else:
-            return futuresContractPrices.create_empty()
+            prices = futuresContractPrices.create_empty()
 
+        return prices
 
     def get_prices_at_frequency_for_contract_object(
-            self, contract_object: futuresContract, freq: str="D"):
+            self, contract_object: futuresContract, freq: Frequency = DAILY_PRICE_FREQ):
         """
-        get some prices
+        get some prices at a given frequency
 
         :param contract_object:  futuresContract
         :param freq: str; one of D, H, 5M, M, 10S, S
         :return: data
         """
-        assert freq in PRICE_FREQ
 
         if self.has_data_for_contract(contract_object):
             return self._get_prices_at_frequency_for_contract_object_no_checking(
@@ -293,7 +293,7 @@ class futuresContractPriceData(baseData):
         raise NotImplementedError(BASE_CLASS_ERROR)
 
     def _get_prices_at_frequency_for_contract_object_no_checking(
-        self, contract_object: futuresContract, freq: str
+        self, contract_object: futuresContract, freq: Frequency
     ) -> futuresContractPrices:
 
         raise NotImplementedError(BASE_CLASS_ERROR)

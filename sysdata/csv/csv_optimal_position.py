@@ -2,8 +2,8 @@ import pandas as pd
 from sysdata.production.optimal_positions import optimalPositionData
 from syscore.fileutils import get_filename_for_package
 from syscore.objects import arg_not_supplied
-from syslogdiag.log import logtoscreen
-from sysobjects.production.strategy import instrumentStrategy
+from syslogdiag.log_to_screen import logtoscreen
+from sysobjects.production.tradeable_object import instrumentStrategy
 
 DATE_INDEX_NAME = "DATETIME"
 

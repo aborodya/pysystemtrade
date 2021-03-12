@@ -7,28 +7,16 @@ import time
 
 from ib_insync import IB
 
-from sysbrokers.IB.ib_client import ibClient
 from sysbrokers.IB.ib_connection_defaults import ib_defaults
-from sysbrokers.IB.ib_server import ibServer
-from syscore.objects import arg_not_supplied, missing_data
+from syscore.objects import missing_data,arg_not_supplied
 
-from syslogdiag.log import logtoscreen
+from syslogdiag.log_to_screen import logtoscreen
 
-from sysdata.private_config import get_private_then_default_key_value
-
-
-def get_broker_account() -> str:
-
-    account_id = get_private_then_default_key_value(
-        "broker_account", raise_error=False
-    )
-    if account_id is missing_data:
-        return arg_not_supplied
-    else:
-        return account_id
+from sysdata.config.production_config import get_production_config
 
 
-class connectionIB(ibClient, ibServer):
+
+class connectionIB(object):
     """
     Connection object for connecting IB
     (A database plug in will need to be added for streaming prices)
@@ -37,8 +25,9 @@ class connectionIB(ibClient, ibServer):
     def __init__(
         self,
         client_id: int,
-        ipaddress=None,
-        port=None,
+        ib_ipaddress: str=arg_not_supplied,
+        ib_port: int=arg_not_supplied,
+        account: str = arg_not_supplied,
         log=logtoscreen("connectionIB")
     ):
         """
@@ -50,7 +39,8 @@ class connectionIB(ibClient, ibServer):
         """
 
         # resolve defaults
-        ipaddress, port, __ = ib_defaults(ipaddress=ipaddress, port=port)
+
+        ipaddress, port, __ = ib_defaults(ib_ipaddress=ib_ipaddress, ib_port=ib_port)
 
         # The client id is pulled from a mongo database
         # If for example you want to use a different database you could do something like:
@@ -64,32 +54,44 @@ class connectionIB(ibClient, ibServer):
         self._ib_connection_config = dict(
             ipaddress=ipaddress, port=port, client=client_id)
 
-        # if you copy for another broker, don't forget the logs
-        ibServer.__init__(self, log=log)
-        ibClient.__init__(self, log=log)
-
         ib = IB()
 
-        account = get_broker_account()
+        if account is arg_not_supplied:
+            ## not passed get from config
+            account = get_broker_account()
+
+        ## that may still return missing data...
         if account is missing_data:
             self.log.error("Broker account ID not found in private config - may cause issues")
-            ib.connect(ipaddress, port, clientId=client_id, account=account)
+            ib.connect(ipaddress, port, clientId=client_id)
         else:
+            ## conncect using account
             ib.connect(ipaddress, port, clientId=client_id, account=account)
 
-        # Attempt to fix connection bug
+        # Sometimes takes a few seconds to resolve... only have to do this once per process so no biggie
         time.sleep(5)
 
-        # Add handlers, from ibServer methods
-        ib.errorEvent += self.error_handler
+        self._ib = ib
+        self._log = log
+        self._account = account
 
-        self.ib = ib
+    @property
+    def ib(self):
+        return self._ib
+
+    @property
+    def log(self):
+        return self._log
 
     def __repr__(self):
         return "IB broker connection" + str(self._ib_connection_config)
 
     def client_id(self):
         return self._ib_connection_config["client"]
+
+    @property
+    def account(self):
+        return self._account
 
     def close_connection(self):
         self.log.msg("Terminating %s" % str(self._ib_connection_config))
@@ -102,3 +104,9 @@ class connectionIB(ibClient, ibServer):
             )
 
 
+
+def get_broker_account() -> str:
+    production_config = get_production_config()
+    account_id = production_config.get_element_or_missing_data(
+        "broker_account")
+    return account_id

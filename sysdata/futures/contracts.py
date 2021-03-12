@@ -7,7 +7,9 @@ USE_CHILD_CLASS_ERROR = "You need to use a child class of futuresContractData"
 class ContractNotFound(Exception):
     pass
 
-from syslogdiag.log import logtoscreen
+
+from syslogdiag.log_to_screen import logtoscreen
+
 
 class futuresContractData(baseData):
     """
@@ -120,7 +122,7 @@ class futuresContractData(baseData):
     ):
         raise NotImplementedError(USE_CHILD_CLASS_ERROR)
 
-    def is_contract_in_data(self, instrument_code:str, contract_date: str) -> bool:
+    def is_contract_in_data(self, instrument_code:str, contract_date_str: str) -> bool:
         raise NotImplementedError
 
     def _add_contract_object_without_checking_for_existing_entry(

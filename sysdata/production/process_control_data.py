@@ -1,9 +1,9 @@
 import datetime
 
 from sysobjects.production.process_control import dictOfControlProcesses, controlProcess, was_running_pid_notok_closed
-from syscore.objects import missing_data, _named_object, success
+from syscore.objects import named_object, success, missing_data
 from sysdata.base_data import baseData
-from syslogdiag.log import logtoscreen
+from syslogdiag.log_to_screen import logtoscreen
 
 
 class controlProcessData(baseData):
@@ -55,7 +55,7 @@ class controlProcessData(baseData):
     ):
         self._control_store[process_name] = new_control_object
 
-    def check_if_okay_to_start_process(self, process_name: str) -> _named_object:
+    def check_if_okay_to_start_process(self, process_name: str) -> named_object:
         """
 
         :param process_name: str
@@ -66,7 +66,7 @@ class controlProcessData(baseData):
 
         return result
 
-    def start_process(self, process_name: str) -> _named_object:
+    def start_process(self, process_name: str) -> named_object:
         """
 
         :param process_name: str
@@ -77,6 +77,12 @@ class controlProcessData(baseData):
         if result is success:
             self._update_control_for_process_name(
                 process_name, original_process)
+
+        return result
+
+    def check_if_should_pause_process(self, process_name: str) -> bool:
+        original_process = self.get_control_for_process_name(process_name)
+        result = original_process.check_if_should_pause()
 
         return result
 
@@ -105,7 +111,7 @@ class controlProcessData(baseData):
 
         return success
 
-    def finish_process(self, process_name: str) -> _named_object:
+    def finish_process(self, process_name: str) -> named_object:
         """
 
         :param process_name: str
@@ -154,6 +160,11 @@ class controlProcessData(baseData):
     def change_status_to_no_run(self, process_name: str):
         original_process = self.get_control_for_process_name(process_name)
         original_process.change_status_to_no_run()
+        self._update_control_for_process_name(process_name, original_process)
+
+    def change_status_to_pause(self, process_name: str):
+        original_process = self.get_control_for_process_name(process_name)
+        original_process.change_status_to_pause()
         self._update_control_for_process_name(process_name, original_process)
 
     def log_start_run_for_method(self, process_name: str, method_name: str):

@@ -8,10 +8,12 @@ Limits per contract don't make sense, but it makes sense to limit (a) the number
 from dataclasses import dataclass
 from syscore.objects import missing_data
 from sysdata.base_data import baseData
-from syslogdiag.log import logtoscreen
+from syslogdiag.log_to_screen import logtoscreen
 from sysobjects.production.trade_limits import tradeLimit, listOfTradeLimits
 
-from sysobjects.production.strategy import instrumentStrategy
+from sysobjects.production.tradeable_object import instrumentStrategy
+
+
 
 @dataclass
 class instrumentStrategyKeyAndDays:
@@ -46,7 +48,7 @@ class tradeLimitData(baseData):
     def what_trade_is_possible(
             self,
             instrument_strategy: instrumentStrategy,
-            proposed_trade: int):
+            proposed_trade: int) -> int:
         combined_list = self._get_list_of_all_relevant_trade_limits(
             instrument_strategy
         )
@@ -69,7 +71,7 @@ class tradeLimitData(baseData):
         self._update_list_of_trade_limits(combined_list)
 
     def _get_list_of_all_relevant_trade_limits(
-            self, instrument_strategy: instrumentStrategy):
+            self, instrument_strategy: instrumentStrategy) -> listOfTradeLimits:
         instrument_trade_limits = self._get_trade_limits_for_instrument(
             instrument_strategy.instrument_code)
         strategy_instrument_trade_limits = \
@@ -135,7 +137,7 @@ class tradeLimitData(baseData):
         trade_limit.reset()
         self._update_trade_limit_object(trade_limit)
 
-    def get_all_limits(self):
+    def get_all_limits(self) -> list:
         all_keys = self._get_all_limit_keys()
         all_limits = [
             self._get_trade_limit_object_from_isd_key(key) for key in all_keys]

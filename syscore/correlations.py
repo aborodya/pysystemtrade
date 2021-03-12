@@ -1,6 +1,8 @@
 """
 Correlations are important and used a lot
 """
+import scipy.cluster.hierarchy as sch
+
 from copy import copy
 
 import numpy as np
@@ -10,8 +12,29 @@ from syscore.genutils import str2Bool, group_dict_from_natural, progressBar
 from syscore.dateutils import generate_fitting_dates
 from syscore.pdutils import df_from_list, must_have_item
 
-from syslogdiag.log import logtoscreen
+from syslogdiag.log_to_screen import logtoscreen
 
+
+def ordered_correlation_matrix(corr_matrix: pd.DataFrame):
+    clusters = cluster_correlation_matrix(corr_matrix.values)
+    unique_clusters = list(set(clusters))
+    starting_names = list(corr_matrix.columns)
+    ordered_names = []
+    for cluster_id  in unique_clusters:
+        relevant_names = [column_name for column_name, cluster in zip(starting_names, clusters) if cluster==cluster_id]
+        ordered_names = ordered_names + relevant_names
+
+    new_matrix = corr_matrix[ordered_names].reindex(ordered_names)
+
+    return new_matrix
+
+def cluster_correlation_matrix(corr_matrix: np.array, max_cluster_size = 3) -> list:
+    d = sch.distance.pdist(corr_matrix)
+    L = sch.linkage(d, method="complete")
+    ind = sch.fcluster(L, max_cluster_size, criterion="maxclust")
+    ind = list(ind)
+
+    return ind
 
 def get_avg_corr(sigma):
     """

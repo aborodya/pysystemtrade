@@ -1,5 +1,5 @@
 from syscore.fileutils import delete_old_files_with_extension_in_pathname
-from sysproduction.diagnostic.backtest_state import get_directory_store_backtests
+from sysproduction.data.backtest import get_directory_store_backtests
 from sysdata.data_blob import dataBlob
 
 
@@ -12,7 +12,7 @@ def clean_truncate_backtest_states():
 
 
 class cleanTruncateBacktestStates:
-    def __init__(self, data):
+    def __init__(self, data: dataBlob):
         self.data = data
 
     def clean_backtest_states(self):

@@ -1,6 +1,8 @@
 from syscore.genutils import sign
+from sysexecution.orders.base_orders import Order
+from sysexecution.trade_qty import tradeQuantity
 from sysobjects.instruments import futuresInstrument
-from sysobjects.production.strategy import instrumentStrategy
+from sysobjects.production.tradeable_object import instrumentStrategy
 
 NO_LIMIT = "No limit"
 
@@ -68,17 +70,31 @@ class positionLimitAndPosition(object):
     def key(self):
         return self._position_limit_object.key
 
-    def what_trade_is_possible(self, proposed_trade:int) -> int:
+    def what_trade_is_possible(self, order: Order) -> Order:
         if self.position_limit == NO_LIMIT:
-            return proposed_trade
+            return order
         position = self.position
         position_limit = self.position_limit
 
-        possible_trade = what_trade_is_possible(position, position_limit, proposed_trade)
+        possible_trade = what_trade_is_possible(position=position, position_limit=position_limit, order=order)
 
         return possible_trade
 
-def what_trade_is_possible(position: int, position_limit: int, proposed_trade: int)-> int:
+def what_trade_is_possible(position: int, position_limit: int, order: Order) -> Order:
+
+    ## POSIITON LIMITS CAN ONLY BE APPLIED TO SINGLE LEG TRADES, EG INSTRUMENT ORDERS
+    proposed_trade = order.as_single_trade_qty_or_error()
+    possible_trade = what_trade_is_possible_single_leg_trade(position=position,
+                                                             position_limit=position_limit,
+                                                             proposed_trade=proposed_trade)
+
+    possible_trade_as_trade_qty = tradeQuantity(possible_trade)
+
+    order = order.replace_required_trade_size_only_use_for_unsubmitted_trades(possible_trade_as_trade_qty)
+
+    return order
+
+def what_trade_is_possible_single_leg_trade(position: int, position_limit: int, proposed_trade: int)-> int:
     """
     >>> what_trade_is_possible(1, 1, 0)
     0
@@ -167,7 +183,7 @@ def what_trade_is_possible(position: int, position_limit: int, proposed_trade: i
 
     if position>=0 and abs(position)<=abs_position_limit:
         ## Was okay, but won't be after trade
-        ## We move to the limit, eithier long or short depending on what the trade wanted to do
+        ## We move to the limit, either long or short depending on what the trade wanted to do
         possible_new_position = signed_position_limit
         possible_trade = possible_new_position - position
 
@@ -191,7 +207,7 @@ def what_trade_is_possible(position: int, position_limit: int, proposed_trade: i
 
     if position<0 and abs(position)<=abs_position_limit:
         ## Was okay, but won't be after trade
-        ## We move to the limit, eithier long or short depending on what the trade wanted to do
+        ## We move to the limit, either long or short depending on what the trade wanted to do
         possible_new_position = signed_position_limit
         possible_trade = possible_new_position - position
 

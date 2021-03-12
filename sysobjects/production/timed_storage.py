@@ -1,9 +1,9 @@
+from copy import  copy
 import datetime
 
 import pandas as pd
 
 from syscore.objects import success, arg_not_supplied, missing_data
-
 
 DATE_KEY_NAME= 'date'
 class timedEntry(object):
@@ -33,7 +33,7 @@ class timedEntry(object):
 
     def __init__(self, *args, date: datetime.datetime=arg_not_supplied):
         """
-        Can pass eithier a single dict (which can include 'date') or the arguments in the order of required_arguments
+        Can pass either a single dict (which can include 'date') or the arguments in the order of required_arguments
 
         >>> timedEntry(1,2)._arg_dict_excluding_date
         {'test1': 1, 'test2': 2}
@@ -51,7 +51,7 @@ class timedEntry(object):
         self._init_data_from_passed_args(args_as_dict)
 
     def _resolve_args(self, args: tuple, date:datetime.datetime) -> dict:
-        ## We can eithier be passed a dict or a list of args
+        ## We can either be passed a dict or a list of args
         ## If we're passed a dict, we put the date in if available
         ## Otherwise it's a list and
         if len(args) == 1:
@@ -93,6 +93,8 @@ class timedEntry(object):
         date = args_as_dict.pop(DATE_KEY_NAME)
         if date is arg_not_supplied:
             date = datetime.datetime.now()
+
+        assert type(date) is datetime.datetime
 
         self._date = date
         for arg_name in args_as_dict.keys():
@@ -205,7 +207,6 @@ class listOfEntries(list):
     def final_entry(self):
         if len(self) == 0:
             return missing_data
-
         self.sort()
         return self[-1]
 

@@ -2,12 +2,11 @@
 An override is something that affects our normal trading behaviour
 """
 
-from syslogdiag.log import logtoscreen
-from sysobjects.production.override import Override
-from sysobjects.production.strategy import instrumentStrategy
+from syslogdiag.log_to_screen import logtoscreen
+from sysobjects.production.override import Override, DEFAULT_OVERRIDE
+from sysobjects.production.tradeable_object import instrumentStrategy
 from sysdata.base_data import baseData
 
-DEFAULT_OVERRIDE = Override(1.0)
 
 strategy_overrides = "strategies"
 instrument_overrides = "instruments"
@@ -26,8 +25,8 @@ class overrideData(baseData):
         instrument_override = self._get_override_for_instrument(instrument_strategy.instrument_code)
         strategy_instrument_override = self._get_override_for_instrument_strategy(
             instrument_strategy)
-
-        return strategy_override * instrument_override * strategy_instrument_override
+        cumulative_override =strategy_override * instrument_override * strategy_instrument_override
+        return cumulative_override
 
     def _get_override_for_strategy(self, strategy_name: str) -> Override:
         return self._get_override_object_for_type_and_key(strategy_overrides, strategy_name)

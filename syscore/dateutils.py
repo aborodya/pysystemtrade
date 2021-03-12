@@ -1,6 +1,8 @@
 """
 Various routines to do with dates
 """
+from enum import Enum
+
 import datetime
 import time
 import calendar
@@ -39,6 +41,22 @@ UNIXTIME_IN_YEAR = UNIXTIME_CONVERTER * SECONDS_IN_YEAR
 
 MONTH_LIST = ["F", "G", "H", "J", "K", "M", "N", "Q", "U", "V", "X", "Z"]
 
+
+Frequency = Enum('Frequency', 'Day Hour Minutes_15 Minutes_5 Minute Seconds_10 Second')
+DAILY_PRICE_FREQ = Frequency.Day
+
+def from_config_frequency_to_frequency(freq_as_str:str)-> Frequency:
+    LOOKUP_TABLE = {'D':Frequency.Day,
+                        'H':Frequency.Hour,
+                        '15M': Frequency.Minutes_15,
+                        '5M': Frequency.Minutes_5,
+                        'M': Frequency.Minute,
+                        '10S': Frequency.Seconds_10,
+                        'S': Frequency.Second}
+
+    frequency = LOOKUP_TABLE.get(freq_as_str, missing_data)
+
+    return frequency
 
 def month_from_contract_letter(contract_letter: str) -> int:
     """
@@ -126,7 +144,8 @@ def get_datetime_from_datestring(datestring: str):
     return return_date
 
 
-def fraction_of_year_between_price_and_carry_expiries(carry_row, floor_date_diff: int=1) -> float:
+def fraction_of_year_between_price_and_carry_expiries(carry_row: pd.Series,
+                                                      floor_date_diff: int=1) -> float:
     """
     Given a pandas row containing CARRY_CONTRACT and PRICE_CONTRACT, both of
     which represent dates
@@ -154,21 +173,36 @@ def fraction_of_year_between_price_and_carry_expiries(carry_row, floor_date_diff
     0.13689253935660506
 
     """
-    if carry_row.PRICE_CONTRACT == "" or carry_row.CARRY_CONTRACT == "":
+    days_between_expiries = get_days_between_expiries(carry_row)
+    if np.isnan(days_between_expiries):
         return np.nan
-    period_between_expiries =                 get_datetime_from_datestring(carry_row.CARRY_CONTRACT) \
-                                              - get_datetime_from_datestring(carry_row.PRICE_CONTRACT)
 
-    days_between_expiries = period_between_expiries.days
-
-    if abs(days_between_expiries) < floor_date_diff:
-        days_between_expiries = sign(days_between_expiries) * floor_date_diff
+    days_between_expiries = apply_floor_to_date_differential(days_between_expiries,
+                                                             floor_date_diff=floor_date_diff)
 
     ## Annualise, ensuring float output
     fraction_of_year_between_expiries = float(days_between_expiries) / CALENDAR_DAYS_IN_YEAR
 
     return fraction_of_year_between_expiries
 
+def get_days_between_expiries(carry_row) -> float:
+    if carry_row.PRICE_CONTRACT == "" or carry_row.CARRY_CONTRACT == "":
+        return np.nan
+
+    carry_expiry =  get_datetime_from_datestring(carry_row.CARRY_CONTRACT)
+    price_expiry = get_datetime_from_datestring(carry_row.PRICE_CONTRACT)
+    period_between_expiries = carry_expiry - price_expiry
+
+    days_between_expiries = period_between_expiries.days
+
+    return days_between_expiries
+
+def apply_floor_to_date_differential(days_between_expiries: float,
+                                     floor_date_diff: float):
+    if abs(days_between_expiries) < floor_date_diff:
+        days_between_expiries = sign(days_between_expiries) * floor_date_diff
+
+    return days_between_expiries
 
 class fit_dates_object(object):
     def __init__(
@@ -333,7 +367,8 @@ def adjust_timestamp_to_include_notional_close_and_time_offset(
     actual_close: pd.DateOffset = NOTIONAL_CLOSING_TIME_AS_PD_OFFSET,
     original_close: pd.DateOffset = pd.DateOffset(hours=23, minutes=0, seconds=0),
     time_offset: pd.DateOffset = pd.DateOffset(hours=0),
-):
+) -> datetime.datetime:
+
     if timestamp.hour == 0 and timestamp.minute == 0 and timestamp.second == 0:
         new_datetime = timestamp.date() + actual_close
     elif time_matches(timestamp, original_close):
@@ -344,7 +379,7 @@ def adjust_timestamp_to_include_notional_close_and_time_offset(
     return new_datetime
 
 
-def strip_timezone_fromdatetime(timestamp_with_tz_info):
+def strip_timezone_fromdatetime(timestamp_with_tz_info) -> datetime.datetime:
     ts = timestamp_with_tz_info.timestamp()
     new_timestamp = datetime.datetime.fromtimestamp(ts)
     return new_timestamp
@@ -414,9 +449,9 @@ class tradingStartAndEndDateTimes(object):
         return hours_left
 
 
-    def less_than_one_hour_left(self) -> bool:
+    def less_than_N_hours_left(self, N_hours: float = 1.0) -> bool:
         hours_left = self.hours_left_before_market_close()
-        if hours_left<1.0:
+        if hours_left<N_hours:
             return True
         else:
             return False
@@ -443,11 +478,11 @@ class manyTradingStartAndEndDateTimes(list):
                 return True
         return False
 
-    def less_than_one_hour_left(self):
+    def less_than_N_hours_left(self, N_hours: float = 1.0):
         for check_period in self:
             if check_period.okay_to_trade_now():
                 # market is open, but for how long?
-                if check_period.less_than_one_hour_left():
+                if check_period.less_than_N_hours_left(N_hours=N_hours):
                     return True
                 else:
                     return False
@@ -471,3 +506,18 @@ def last_run_or_heartbeat_from_date_or_none(last_run_or_heartbeat: datetime.date
             SHORT_DATE_PATTERN)
 
     return last_run_or_heartbeat
+
+
+date_formatting = "%Y%m%d_%H%M%S"
+
+
+def create_datetime_string(datetime_to_use):
+    datetime_marker = datetime_to_use.strftime(date_formatting)
+
+    return datetime_marker
+
+
+def from_marker_to_datetime(datetime_marker):
+    return datetime.datetime.strptime(datetime_marker, date_formatting)
+
+
