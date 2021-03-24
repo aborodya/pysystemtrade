@@ -257,9 +257,11 @@ We'll see this pattern of `my_system...stage name...get_something()` a lot. The 
 What about if we want more than one trading rule, say a couple of variations of the ewmac rule? To define two different flavours of ewmac we're going to need to learn a little bit more about trading rules. Remember when we had `my_rules=Rules(dict(ewmac=ewmac))`? Well this is an equivalent way of doing it:
 
 ```python
-from systems.forecasting import TradingRule
-ewmac_rule=TradingRule(ewmac)
-my_rules=Rules(dict(ewmac=ewmac_rule))
+
+from systems.trading_rules import TradingRule
+
+ewmac_rule = TradingRule(ewmac)
+my_rules = Rules(dict(ewmac=ewmac_rule))
 ewmac_rule
 ```
 
@@ -400,8 +402,9 @@ Since we have two trading rule variations we're naturally going to want to combi
 
 ```python
 from systems.forecast_combine import ForecastCombine
-combiner=ForecastCombine()
-my_system=System([fcs, empty_rules, combiner], data, my_config)
+
+combiner = ForecastCombine()
+my_system = System([fcs, empty_rules, combiner], data, my_config)
 my_system.combForecast.get_forecast_weights("EDOLLAR").tail(5)
 my_system.combForecast.get_forecast_diversification_multiplier("EDOLLAR").tail(5)
 
@@ -432,11 +435,12 @@ Note: Since we need to know the performance of different trading rules, we need 
 
 ```python
 from systems.account import Account
+
 my_account = Account()
 
 ## let's use naive markowitz to get more interesting results...
-my_config.forecast_weight_estimate=dict(method="one_period")
-my_config.use_forecast_weight_estimates=True
+my_config.forecast_weight_estimate = dict(method="one_period")
+my_config.use_forecast_weight_estimates = True
 my_config.use_forecast_div_mult_estimates = True
 
 combiner = ForecastCombine()

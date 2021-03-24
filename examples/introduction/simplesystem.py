@@ -44,7 +44,7 @@ print(my_system.rules.get_raw_forecast("EDOLLAR", "ewmac").tail(5))
 Define a TradingRule
 """
 
-from systems.forecasting import TradingRule
+from systems.trading_rules import TradingRule
 
 ewmac_rule = TradingRule(ewmac)
 my_rules = Rules(dict(ewmac=ewmac_rule))
@@ -154,10 +154,10 @@ my_system = System([fcs, my_rules, combiner, possizer], data, my_config)
 
 print(my_system.positionSize.get_price_volatility("EDOLLAR").tail(5))
 print(my_system.positionSize.get_block_value("EDOLLAR").tail(5))
-print(my_system.positionSize.get_instrument_sizing_data("EDOLLAR"))
+print(my_system.positionSize.get_underlying_price("EDOLLAR"))
 print(my_system.positionSize.get_instrument_value_vol("EDOLLAR").tail(5))
 print(my_system.positionSize.get_volatility_scalar("EDOLLAR").tail(5))
-print(my_system.positionSize.get_daily_cash_vol_target())
+print(my_system.positionSize.get_vol_target_dict())
 print(my_system.positionSize.get_subsystem_position("EDOLLAR").tail(5))
 
 # portfolio - estimated
