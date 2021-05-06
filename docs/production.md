@@ -18,156 +18,203 @@ Related documents (which you should read before this one!):
 Table of Contents
 =================
 
-   * [Table of Contents](#table-of-contents)
-   * [Quick start guide](#quick-start-guide)
-   * [Production system data flow](#production-system-data-flow)
-   * [Overview of a production system](#overview-of-a-production-system)
-      * [Implementation options](#implementation-options)
-         * [Automation options](#automation-options)
-         * [Machines, containers and clouds](#machines-containers-and-clouds)
-         * [Backup machine](#backup-machine)
-         * [Multiple systems](#multiple-systems)
-      * [Code and configuration management](#code-and-configuration-management)
-         * [Managing your separate directories of code and configuration](#managing-your-separate-directories-of-code-and-configuration)
-         * [Managing your private directory](#managing-your-private-directory)
-      * [Finalise your backtest configuration](#finalise-your-backtest-configuration)
-      * [Linking to a broker](#linking-to-a-broker)
-      * [Other data sources](#other-data-sources)
-      * [Data storage](#data-storage)
-      * [Data backup](#data-backup)
-         * [Mongo data](#mongo-data)
-         * [Mongo / csv data](#mongo--csv-data)
-      * [Echoes, Logging, diagnostics and reporting](#echoes-logging-diagnostics-and-reporting)
-         * [Echos: stdout output](#echos-stdout-output)
-            * [Cleaning old echo files](#cleaning-old-echo-files)
-         * [Logging](#logging)
-            * [Adding logging to your code](#adding-logging-to-your-code)
-            * [Getting log data back](#getting-log-data-back)
-            * [Cleaning old logs](#cleaning-old-logs)
-         * [Reporting](#reporting)
-   * [Positions and order levels](#positions-and-order-levels)
-      * [Instrument level](#instrument-level)
-      * [Contract level](#contract-level)
-      * [Broker level](#broker-level)
-   * [Scripts](#scripts)
-      * [Script calling](#script-calling)
-      * [Script naming convention](#script-naming-convention)
-      * [Run processes](#run-processes)
-      * [Core production system components](#core-production-system-components)
-         * [Get spot FX data from interactive brokers, write to MongoDB (Daily)](#get-spot-fx-data-from-interactive-brokers-write-to-mongodb-daily)
-         * [Update sampled contracts (Daily)](#update-sampled-contracts-daily)
-         * [Update futures contract historical price data (Daily)](#update-futures-contract-historical-price-data-daily)
-         * [Update multiple and adjusted prices (Daily)](#update-multiple-and-adjusted-prices-daily)
-         * [Update capital and p&amp;l by polling brokerage account](#update-capital-and-pl-by-polling-brokerage-account)
-         * [Allocate capital to strategies](#allocate-capital-to-strategies)
-         * [Run updated backtest systems for one or more strategies](#run-updated-backtest-systems-for-one-or-more-strategies)
-         * [Generate orders for each strategy](#generate-orders-for-each-strategy)
-         * [Execute orders](#execute-orders)
-      * [Interactive scripts to modify data](#interactive-scripts-to-modify-data)
-         * [Manual check of futures contract historical price data](#manual-check-of-futures-contract-historical-price-data)
-         * [Manual check of FX price data](#manual-check-of-fx-price-data)
-         * [Interactively modify capital values](#interactively-modify-capital-values)
-         * [Interactively roll adjusted prices](#interactively-roll-adjusted-prices)
-      * [Menu driven interactive scripts](#menu-driven-interactive-scripts)
-         * [Interactive controls](#interactive-controls)
-            * [Trade limits](#trade-limits)
-            * [Position limits](#position-limits)
-            * [Trade control / override](#trade-control--override)
-            * [Broker client IDs](#broker-client-ids)
-            * [Process control &amp; monitoring](#process-control--monitoring)
-               * [View processes](#view-processes)
-               * [Change status of process](#change-status-of-process)
-               * [Global status change](#global-status-change)
-               * [Mark as finished](#mark-as-finished)
-               * [Mark all dead processes as finished](#mark-all-dead-processes-as-finished)
-               * [View process configuration](#view-process-configuration)
-         * [Interactive diagnostics](#interactive-diagnostics)
-            * [Backtest objects](#backtest-objects)
-               * [Output choice](#output-choice)
-               * [Choice of strategy and backtest](#choice-of-strategy-and-backtest)
-               * [Choose stage / method / arguments](#choose-stage--method--arguments)
-               * [Alternative python code](#alternative-python-code)
-            * [Reports](#reports)
-            * [Logs, errors, emails](#logs-errors-emails)
-               * [View stored emails](#view-stored-emails)
-               * [View errors](#view-errors)
-               * [View logs](#view-logs)
-            * [View prices](#view-prices)
-            * [View capital](#view-capital)
-            * [Positions and orders](#positions-and-orders)
-            * [Instrument configuration](#instrument-configuration)
-               * [View instrument configuration data](#view-instrument-configuration-data)
-               * [View contract configuration data](#view-contract-configuration-data)
-         * [Interactive order stack](#interactive-order-stack)
-            * [View](#view)
-            * [Create orders](#create-orders)
-               * [Spawn contract orders from instrument orders](#spawn-contract-orders-from-instrument-orders)
-               * [Create force roll contract orders](#create-force-roll-contract-orders)
-               * [Create (and try to execute...) IB broker orders](#create-and-try-to-execute-ib-broker-orders)
-               * [Balance trade: Create a series of trades and immediately fill them (not actually executed)](#balance-trade-create-a-series-of-trades-and-immediately-fill-them-not-actually-executed)
-               * [Balance instrument trade: Create a trade just at the strategy level and fill (not actually executed)](#balance-instrument-trade-create-a-trade-just-at-the-strategy-level-and-fill-not-actually-executed)
-               * [Manual trade: Create a series of trades to be executed](#manual-trade-create-a-series-of-trades-to-be-executed)
-               * [Cash FX trade](#cash-fx-trade)
-            * [Netting, cancellation and locks](#netting-cancellation-and-locks)
-               * [Cancel broker order](#cancel-broker-order)
-               * [Net instrument orders](#net-instrument-orders)
-               * [Lock/unlock order](#lockunlock-order)
-               * [Lock/unlock instrument code](#lockunlock-instrument-code)
-               * [Unlock all instruments](#unlock-all-instruments)
-            * [Delete and clean](#delete-and-clean)
-               * [Delete entire stack (CAREFUL!)](#delete-entire-stack-careful)
-               * [Delete specific order ID (CAREFUL!)](#delete-specific-order-id-careful)
-               * [End of day process (cancel orders, mark all orders as complete, delete orders)](#end-of-day-process-cancel-orders-mark-all-orders-as-complete-delete-orders)
-      * [Reporting, housekeeping and backup scripts](#reporting-housekeeping-and-backup-scripts)
-         * [Run all reports](#run-all-reports)
-         * [Delete old pickled backtest state objects](#delete-old-pickled-backtest-state-objects)
-         * [Clean up old logs](#clean-up-old-logs)
-         * [Truncate echo files](#truncate-echo-files)
-         * [Backup Arctic data to .csv files](#backup-arctic-data-to-csv-files)
-         * [Backup files](#backup-files)
-         * [Start up script](#start-up-script)
-   * [Scheduling](#scheduling)
-      * [Issues to consider when constructing the schedule](#issues-to-consider-when-constructing-the-schedule)
-      * [Choice of scheduling systems](#choice-of-scheduling-systems)
-         * [Linux cron](#linux-cron)
-         * [Third party scheduler](#third-party-scheduler)
-         * [Windows task scheduler](#windows-task-scheduler)
-         * [Python](#python)
-         * [Manual system](#manual-system)
-         * [Hybrid of python and cron](#hybrid-of-python-and-cron)
-      * [Pysystemtrade scheduling](#pysystemtrade-scheduling)
-         * [Configuring the scheduling](#configuring-the-scheduling)
-            * [The crontab](#the-crontab)
-            * [Process configuration](#process-configuration)
-         * [System monitor](#system-monitor)
-         * [Troubleshooting?](#troubleshooting)
-   * [Production system concepts](#production-system-concepts)
-      * [Configuration files](#configuration-files)
-         * [System defaults &amp; Private config](#system-defaults--private-config)
-         * [System backtest .yaml config file(s)](#system-backtest-yaml-config-files)
-         * [Broker and data source specific configuration files](#broker-and-data-source-specific-configuration-files)
-         * [Only used when setting up the system](#only-used-when-setting-up-the-system)
-      * [Capital](#capital)
-         * [Large changes in capital](#large-changes-in-capital)
-         * [Withdrawals and deposits of cash or stock](#withdrawals-and-deposits-of-cash-or-stock)
-         * [Change in capital methodology or capital base](#change-in-capital-methodology-or-capital-base)
-      * [Strategies](#strategies)
-         * [Strategy capital](#strategy-capital)
-            * [Risk target](#risk-target)
-            * [Changing risk targets and/or capital](#changing-risk-targets-andor-capital)
-         * [System runner](#system-runner)
-         * [Strategy order generator](#strategy-order-generator)
-         * [Load backtests](#load-backtests)
-         * [Reporting code](#reporting-code)
-   * [Recovering from a crash - what you can save and how, and what you can't](#recovering-from-a-crash---what-you-can-save-and-how-and-what-you-cant)
-   * [Reports](#reports-1)
-         * [Roll report (Daily)](#roll-report-daily)
-         * [P&amp;L report](#pl-report)
-         * [Status report](#status-report)
-         * [Trade report](#trade-report)
-         * [Reconcile report](#reconcile-report)
-         * [Strategy report](#strategy-report)
-         * [Risk report](#risk-report)
+* [Quick start guide](#quick-start-guide)
+* [Production system data flow](#production-system-data-flow)
+* [Overview of a production system](#overview-of-a-production-system)
+   * [Implementation options](#implementation-options)
+      * [Automation options](#automation-options)
+      * [Machines, containers and clouds](#machines-containers-and-clouds)
+      * [Backup machine](#backup-machine)
+      * [Multiple systems](#multiple-systems)
+   * [Code and configuration management](#code-and-configuration-management)
+      * [Managing your separate directories of code and configuration](#managing-your-separate-directories-of-code-and-configuration)
+      * [Managing your private directory](#managing-your-private-directory)
+   * [Finalise your backtest configuration](#finalise-your-backtest-configuration)
+   * [Linking to a broker](#linking-to-a-broker)
+   * [Other data sources](#other-data-sources)
+   * [Data storage](#data-storage)
+   * [Data backup](#data-backup)
+      * [Mongo data](#mongo-data)
+      * [Mongo / csv data](#mongo--csv-data)
+   * [Echoes, Logging, diagnostics and reporting](#echoes-logging-diagnostics-and-reporting)
+      * [Echos: stdout output](#echos-stdout-output)
+         * [Cleaning old echo files](#cleaning-old-echo-files)
+      * [Logging](#logging)
+         * [Adding logging to your code](#adding-logging-to-your-code)
+         * [Getting log data back](#getting-log-data-back)
+         * [Cleaning old logs](#cleaning-old-logs)
+      * [Reporting](#reporting)
+* [Positions and order levels](#positions-and-order-levels)
+   * [Instrument level](#instrument-level)
+   * [Contract level](#contract-level)
+   * [Broker level](#broker-level)
+* [The journey of an order](#the-journey-of-an-order)
+   * [Optimal positions](#optimal-positions)
+      * [Optimal position for roll orders](#optimal-position-for-roll-orders)
+      * [Optimal positions for intra-instrument spread orders](#optimal-positions-for-intra-instrument-spread-orders)
+      * [Optimal positions for intra-instrument spread orders](#optimal-positions-for-intra-instrument-spread-orders-1)
+   * [Strategy order handling](#strategy-order-handling)
+      * [Instrument orders in detail:](#instrument-orders-in-detail)
+      * [Strategy order handling for roll orders](#strategy-order-handling-for-roll-orders)
+      * [Strategy order handling for spread orders](#strategy-order-handling-for-spread-orders)
+      * [Overrides](#overrides)
+   * [Stack handler](#stack-handler)
+   * [Instrument order netting (to be implemented)](#instrument-order-netting-to-be-implemented)
+   * [Contract order creation](#contract-order-creation)
+      * [Contract order creation - normal orders](#contract-order-creation---normal-orders)
+      * [Contract order creation - conditional orders](#contract-order-creation---conditional-orders)
+      * [Contract order creation - passive roll status](#contract-order-creation---passive-roll-status)
+      * [Instrument and contract order creation - active roll orders](#instrument-and-contract-order-creation---active-roll-orders)
+      * [Contract order creation: Intra market spread](#contract-order-creation-intra-market-spread)
+         * [Intra market spreads and rolls](#intra-market-spreads-and-rolls)
+      * [Contract order creation: Inter market spread](#contract-order-creation-inter-market-spread)
+         * [Inter market spreads and rolls](#inter-market-spreads-and-rolls)
+   * [Manual trades](#manual-trades)
+   * [Broker order creation and execution](#broker-order-creation-and-execution)
+      * [Before an order is traded](#before-an-order-is-traded)
+      * [Trading algos](#trading-algos)
+      * [Pre order preparation in the trading algo.](#pre-order-preparation-in-the-trading-algo)
+      * [Broker order characteristics](#broker-order-characteristics)
+      * [Order execution in the sysbroker code](#order-execution-in-the-sysbroker-code)
+      * [Adding the broker trade to the database](#adding-the-broker-trade-to-the-database)
+      * [Managing the trade](#managing-the-trade)
+   * [After execution: fills and completions](#after-execution-fills-and-completions)
+   * [Fills and completions](#fills-and-completions)
+      * [Broker order fills](#broker-order-fills)
+      * [An aside, what happens if fills happen later?](#an-aside-what-happens-if-fills-happen-later)
+      * [Contract order fills and position updates](#contract-order-fills-and-position-updates)
+      * [Instrument order fills and position updates](#instrument-order-fills-and-position-updates)
+         * [Single contract order / single leg](#single-contract-order--single-leg)
+         * [Single contract order / multiple legs (eg spread trade)](#single-contract-order--multiple-legs-eg-spread-trade)
+         * [Multiple contract orders:](#multiple-contract-orders)
+      * [Order completions](#order-completions)
+         * [Order deactivation](#order-deactivation)
+         * [Adding to historic order databases](#adding-to-historic-order-databases)
+   * [End of day stack shut down process](#end-of-day-stack-shut-down-process)
+   * [Historic order tables and trade reporting](#historic-order-tables-and-trade-reporting)
+* [Scripts](#scripts)
+   * [Script calling](#script-calling)
+   * [Script naming convention](#script-naming-convention)
+   * [Run processes](#run-processes)
+   * [Core production system components](#core-production-system-components)
+      * [Get spot FX data from interactive brokers, write to MongoDB (Daily)](#get-spot-fx-data-from-interactive-brokers-write-to-mongodb-daily)
+      * [Update sampled contracts (Daily)](#update-sampled-contracts-daily)
+      * [Update futures contract historical price data (Daily)](#update-futures-contract-historical-price-data-daily)
+      * [Update multiple and adjusted prices (Daily)](#update-multiple-and-adjusted-prices-daily)
+      * [Update capital and p&amp;l by polling brokerage account](#update-capital-and-pl-by-polling-brokerage-account)
+      * [Allocate capital to strategies](#allocate-capital-to-strategies)
+      * [Run updated backtest systems for one or more strategies](#run-updated-backtest-systems-for-one-or-more-strategies)
+      * [Generate orders for each strategy](#generate-orders-for-each-strategy)
+      * [Execute orders](#execute-orders)
+   * [Interactive scripts to modify data](#interactive-scripts-to-modify-data)
+      * [Manual check of futures contract historical price data](#manual-check-of-futures-contract-historical-price-data)
+      * [Manual check of FX price data](#manual-check-of-fx-price-data)
+      * [Interactively modify capital values](#interactively-modify-capital-values)
+      * [Interactively roll adjusted prices](#interactively-roll-adjusted-prices)
+   * [Menu driven interactive scripts](#menu-driven-interactive-scripts)
+      * [Interactive controls](#interactive-controls)
+         * [Trade limits](#trade-limits)
+         * [Position limits](#position-limits)
+         * [Trade control / override](#trade-control--override)
+         * [Broker client IDs](#broker-client-ids)
+         * [Process control &amp; monitoring](#process-control--monitoring)
+            * [View processes](#view-processes)
+            * [Change status of process](#change-status-of-process)
+            * [Global status change](#global-status-change)
+            * [Mark as finished](#mark-as-finished)
+            * [Mark all dead processes as finished](#mark-all-dead-processes-as-finished)
+            * [View process configuration](#view-process-configuration)
+      * [Interactive diagnostics](#interactive-diagnostics)
+         * [Backtest objects](#backtest-objects)
+            * [Output choice](#output-choice)
+            * [Choice of strategy and backtest](#choice-of-strategy-and-backtest)
+            * [Choose stage / method / arguments](#choose-stage--method--arguments)
+            * [Alternative python code](#alternative-python-code)
+         * [Reports](#reports)
+         * [Logs, errors, emails](#logs-errors-emails)
+            * [View stored emails](#view-stored-emails)
+            * [View errors](#view-errors)
+            * [View logs](#view-logs)
+         * [View prices](#view-prices)
+         * [View capital](#view-capital)
+         * [Positions and orders](#positions-and-orders)
+         * [Instrument configuration](#instrument-configuration)
+            * [View instrument configuration data](#view-instrument-configuration-data)
+            * [View contract configuration data](#view-contract-configuration-data)
+      * [Interactive order stack](#interactive-order-stack)
+         * [View](#view)
+         * [Create orders](#create-orders)
+            * [Spawn contract orders from instrument orders](#spawn-contract-orders-from-instrument-orders)
+            * [Create force roll contract orders](#create-force-roll-contract-orders)
+            * [Create (and try to execute...) IB broker orders](#create-and-try-to-execute-ib-broker-orders)
+            * [Balance trade: Create a series of trades and immediately fill them (not actually executed)](#balance-trade-create-a-series-of-trades-and-immediately-fill-them-not-actually-executed)
+            * [Balance instrument trade: Create a trade just at the strategy level and fill (not actually executed)](#balance-instrument-trade-create-a-trade-just-at-the-strategy-level-and-fill-not-actually-executed)
+            * [Manual trade: Create a series of trades to be executed](#manual-trade-create-a-series-of-trades-to-be-executed)
+            * [Cash FX trade](#cash-fx-trade)
+         * [Netting, cancellation and locks](#netting-cancellation-and-locks)
+            * [Cancel broker order](#cancel-broker-order)
+            * [Net instrument orders](#net-instrument-orders)
+            * [Lock/unlock order](#lockunlock-order)
+            * [Lock/unlock instrument code](#lockunlock-instrument-code)
+            * [Unlock all instruments](#unlock-all-instruments)
+            * [Remove Algo lock on contract order](#remove-algo-lock-on-contract-order)
+         * [Delete and clean](#delete-and-clean)
+            * [Delete entire stack (CAREFUL!)](#delete-entire-stack-careful)
+            * [Delete specific order ID (CAREFUL!)](#delete-specific-order-id-careful)
+            * [End of day process (cancel orders, mark all orders as complete, delete orders)](#end-of-day-process-cancel-orders-mark-all-orders-as-complete-delete-orders)
+   * [Reporting, housekeeping and backup scripts](#reporting-housekeeping-and-backup-scripts)
+      * [Run all reports](#run-all-reports)
+      * [Delete old pickled backtest state objects](#delete-old-pickled-backtest-state-objects)
+      * [Clean up old logs](#clean-up-old-logs)
+      * [Truncate echo files](#truncate-echo-files)
+      * [Backup Arctic data to .csv files](#backup-arctic-data-to-csv-files)
+      * [Backup state files](#backup-state-files)
+      * [Backup mongo dump](#backup-mongo-dump)
+      * [Start up script](#start-up-script)
+* [Scheduling](#scheduling)
+   * [Issues to consider when constructing the schedule](#issues-to-consider-when-constructing-the-schedule)
+   * [Choice of scheduling systems](#choice-of-scheduling-systems)
+      * [Linux cron](#linux-cron)
+      * [Third party scheduler](#third-party-scheduler)
+      * [Windows task scheduler](#windows-task-scheduler)
+      * [Python](#python)
+      * [Manual system](#manual-system)
+      * [Hybrid of python and cron](#hybrid-of-python-and-cron)
+   * [Pysystemtrade scheduling](#pysystemtrade-scheduling)
+      * [Configuring the scheduling](#configuring-the-scheduling)
+         * [The crontab](#the-crontab)
+         * [Process configuration](#process-configuration)
+      * [System monitor](#system-monitor)
+      * [Troubleshooting?](#troubleshooting)
+* [Production system concepts](#production-system-concepts)
+   * [Configuration files](#configuration-files)
+      * [System defaults &amp; Private config](#system-defaults--private-config)
+      * [System backtest .yaml config file(s)](#system-backtest-yaml-config-files)
+      * [Broker and data source specific configuration files](#broker-and-data-source-specific-configuration-files)
+      * [Only used when setting up the system](#only-used-when-setting-up-the-system)
+   * [Capital](#capital)
+      * [Large changes in capital](#large-changes-in-capital)
+      * [Withdrawals and deposits of cash or stock](#withdrawals-and-deposits-of-cash-or-stock)
+      * [Change in capital methodology or capital base](#change-in-capital-methodology-or-capital-base)
+   * [Strategies](#strategies)
+      * [Strategy capital](#strategy-capital)
+         * [Risk target](#risk-target)
+         * [Changing risk targets and/or capital](#changing-risk-targets-andor-capital)
+      * [System runner](#system-runner)
+      * [Strategy order generator](#strategy-order-generator)
+      * [Load backtests](#load-backtests)
+      * [Reporting code](#reporting-code)
+* [Recovering from a crash - what you can save and how, and what you can't](#recovering-from-a-crash---what-you-can-save-and-how-and-what-you-cant)
+   * [General advice](#general-advice)
+   * [Data recovery](#data-recovery)
+* [Reports](#reports-1)
+   * [Roll report (Daily)](#roll-report-daily)
+   * [P&amp;L report](#pl-report)
+   * [Status report](#status-report)
+   * [Trade report](#trade-report)
+   * [Reconcile report](#reconcile-report)
+   * [Strategy report](#strategy-report)
+   * [Risk report](#risk-report)
 
 Created by [gh-md-toc](https://github.com/ekalinin/github-markdown-toc)
 
@@ -193,6 +240,7 @@ You need to:
         - SCRIPT_PATH=/home/user_name/pysystemtrade/sysproduction/linux/scripts
         - ECHO_PATH=/home/user_name/echos
         - MONGO_BACKUP_PATH=/media/shared_network/drive/mongo_backup
+    - Add the SCRIPT_PATH directory to your PATH
     - Create the following directories (again use other directories if you like, but you must modify the .profile above)
         - '/home/user_name/data/mongodb/'
         - '/home/user_name/echos/'
@@ -699,7 +747,7 @@ At this stage it's worth discussing the different kinds of positions and order l
 
 You will see 'parent' and 'child' relationships discussed in the code: so the children of an instrument order are contract orders, and so on.
 
-Each level has it's own order 'stack' (not strictly a stack in computer science technology since there is no FIFO rule) on which active orders are held.
+Each level has it's own order 'stack' (not strictly a stack in computer science technology since there is no LIFO rule) on which active orders are held.
 
 ## Instrument level
 
@@ -746,9 +794,9 @@ The most complex part of any trading system is the order management process. It 
 
 - A normal order in a trading system which does not trade spreads. This could involve passively rolling from one contract to the next.
 - A roll order which is a calendar spread (a FORCE roll)
-- A roll order implemented as two seperate trades (a FORCELEG roll)
+- A roll order implemented as two separate trades (a FORCELEG roll)
 - An 'intra-instrument' spread, eg calendar spread order generated by a spread trading system (not implemented yet, but this document reflects my planned approach). As well as spreads this could cover butterflies, or basically any relative value trade which is perfectly hedged in contract space and which can be traded directly as a spread in the market. Markets that spread strategies are likely to be viable in are Crude Oil, Eurodollar and other STIR futures, VIX and V2X (though the skew is likely to make it too dangerous), and certain commodity markets.
-- An 'inter-instrument' spread eg buy US2, sell US5 year generated by a spread trading system (again not implemented yet). These are unlikely to be perfectly hedged in contract space, and importantly can only be executed as seperate trades.
+- An 'inter-instrument' spread eg buy US2, sell US5 year generated by a spread trading system (again not implemented yet). These are unlikely to be perfectly hedged in contract space, and importantly can only be executed as separate trades.
 
 
 ## Optimal positions
@@ -781,7 +829,7 @@ The concept of optimal positions doesn't exist for roll orders, since they are o
 
 Spread strategies don't know they are trading spreads; instead they trade synthetic instruments (eg the 7th minus the 6th Eurodollar spread), for which an adjusted price is generated and they come up with an optimal position (eg buy 2 units means buy two of the 7th and sell two of the 6th Eurodollar). There will be some method for identifying spread instruments by their instrument contract code name.
 
-There will have to be seperate roll calendars for each type of instrument traded in a given market (with each roll date applying to all the components of a given instrument), and to avoid confusion this will require partioning off sections of the futures curve for each instrument.
+There will have to be separate roll calendars for each type of instrument traded in a given market (with each roll date applying to all the components of a given instrument), and to avoid confusion this will require partioning off sections of the futures curve for each instrument.
 
 Reference and limit information would have to include a list of contracts, not just a single contract.
 
@@ -793,9 +841,9 @@ Two options for implementation here:
 
 1) Spread strategies don't know they are trading spreads; instead they trade synthetic instruments (eg the 4 times US 2 year minus US 5 year), for which an adjusted price is generated. There will be some method for identifying spread instruments by their instrument contract code name. This will allow the use of conditional orders (eg don't buy the 5 year until you own the 2 year).
 
-2) Spread strategies know they are trading spreads, and after generating the optimal position they seperately output optimal positions for each leg. To the rest of the system they will appear like normal strategies. This will be useful if leg ratios change over time, and will make the rest of the system simpler.
+2) Spread strategies know they are trading spreads, and after generating the optimal position they separately output optimal positions for each leg. To the rest of the system they will appear like normal strategies. This will be useful if leg ratios change over time, and will make the rest of the system simpler.
 
-Note that regardless of which option is chosen intra-instrument prices will be calculated from the existing multiple prices for the individual instruments, and so won't need their own roll calendar or seperate roll decision logic.
+Note that regardless of which option is chosen intra-instrument prices will be calculated from the existing multiple prices for the individual instruments, and so won't need their own roll calendar or separate roll decision logic.
 
 Reference and limit information would have to include a list of contracts, not just a single contract. 
 
@@ -803,7 +851,7 @@ Reference and limit information would have to include a list of contracts, not j
 
 ## Strategy order handling
 
-Eithier regularly (with run_strategy_order_generator) or ad-hoc (with update_strategy_orders) we generate instrument orders for each strategy. At the moment this is done daily, but for faster systems it may make sense to run it multiple times a day. The connection between the optimal positions and the orders generated depends on the type of strategy, but also what current positions are recorded in the database. 
+Either regularly (with run_strategy_order_generator) or ad-hoc (with update_strategy_orders) we generate instrument orders for each strategy. At the moment this is done daily, but for faster systems it may make sense to run it multiple times a day. The connection between the optimal positions and the orders generated depends on the type of strategy, but also what current positions are recorded in the database. 
 
 For example:
 
@@ -867,7 +915,7 @@ Overrides are applied before instrument orders are placed on the stack. They wil
 
 ## Stack handler
 
-All the remaining operations in the active life of the order occur in the stack handler, eithier automatically with run_stack_handler, or ad-hoc with interactive_order_stack.
+All the remaining operations in the active life of the order occur in the stack handler, either automatically with run_stack_handler, or ad-hoc with interactive_order_stack.
 
 ## Instrument order netting (to be implemented)
 
@@ -938,7 +986,7 @@ The instrument order will have the following characteristics:
 - active: True
 - locked: False
 
-If we are trading FORCELEG, then we will also create two seperate contract orders:
+If we are trading FORCELEG, then we will also create two separate contract orders:
 
 - instrument/strategy: Strategy is _ROLL_PSEUDO_STRATEGY
 - contract date (length 1)
@@ -985,7 +1033,7 @@ To be implemented: Will be bloody complicated
 
 ### Contract order creation: Inter market spread
 
-To be implemented. Will be two (or more) seperate contract orders, each for a single leg of the spread.
+To be implemented. Will be two (or more) separate contract orders, each for a single leg of the spread.
 
 
 #### Inter market spreads and rolls
@@ -1022,7 +1070,7 @@ Note that the size changes do not impact the contract order saved to the databas
 
 ### Trading algos
 
-The next step is to send the order to a trading algo (an algo is allocated if one is not already attached to the contract order). Currently there are two algos included, a market and a 'best execution' algo. Neithier is designed to work with contract orders with a limit price, although the best execution algo uses limit orders tactically. Most orders are allocated to the 'best execution' unless there is less than an hour of market open time left, in which case they go to the market algo.
+The next step is to send the order to a trading algo (an algo is allocated if one is not already attached to the contract order). Currently there are two algos included, a market and a 'best execution' algo. Neither is designed to work with contract orders with a limit price, although the best execution algo uses limit orders tactically. Most orders are allocated to the 'best execution' unless there is less than an hour of market open time left, in which case they go to the market algo.
 
 The contract order is marked 'algo controlled' to stop another thread or process trying to execute the same contract order (only possible right now accidentally through interactive_order_stack). 
 
@@ -1031,7 +1079,7 @@ The contract order is marked 'algo controlled' to stop another thread or process
 The Algo code will reduce the size of the contract trade further if required (both algos currently only trade single contracts by default). The next steps depend on the algo being used:
 
 - The market algo will just use a market order
-- The best execution algo will get a 'ticker object' for the contract. It will decide if it's viable to do a limit trade (basically it won't if the order book is unbalanced and a market order is more likely to get a better price). It will then submit eithier a market trade, or a limit trade which it will try and get executed passively
+- The best execution algo will get a 'ticker object' for the contract. It will decide if it's viable to do a limit trade (basically it won't if the order book is unbalanced and a market order is more likely to get a better price). It will then submit either a market trade, or a limit trade which it will try and get executed passively
 
 The code will then create a broker order of the same size as the cut down contract order (which remember, could be considerably smaller than the original contract order on the database!). 
 
@@ -1045,7 +1093,7 @@ The following attributes are set when a broker order is created:
 - locked: False
 - parent: contract order id
 - active: True
-- order_type: Eithier market or limit order
+- order_type: Either market or limit order
 - algo_used: the algo that created the order, so inherited from contract order
 - limit_price: empty for market orders
 - side_price: current offer for buys, current bid for sells ('current' when order created, not when it's submitted which will be a fraction of a second later); float even for spread orders
@@ -1162,7 +1210,7 @@ We then call code to fill the parent contract order.
 
 ### Contract order fills and position updates
 
-In the stack handler the method apply_broker_fills_to_contract_order will propogate fills upwards to contracts. This will be called eithier by (a) a completed order being handed off from the Algo, (b) a regular scheduled call of pass_fills_from_broker_to_broker_stack if the order wasn't fully filled, (c) a regular scheduled call of pass_fills_from_broker_up_to_contract, or (d) manually from interactive_order_stack.
+In the stack handler the method apply_broker_fills_to_contract_order will propogate fills upwards to contracts. This will be called either by (a) a completed order being handed off from the Algo, (b) a regular scheduled call of pass_fills_from_broker_to_broker_stack if the order wasn't fully filled, (c) a regular scheduled call of pass_fills_from_broker_up_to_contract, or (d) manually from interactive_order_stack.
 
 Because we can have one:many relationships between contract and broker orders, we do this by getting all the fills from all the broker orders that are children of a given contract order. Note that the tradeable object (instrument/strategy/ and one or more contract dates) will be the same. We calculate the following:
 
