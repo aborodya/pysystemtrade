@@ -13,17 +13,15 @@ from systems.forecasting import Rules
 from systems.basesystem import System
 from systems.forecast_combine import ForecastCombine
 from systems.forecast_scale_cap import ForecastScaleCap
-from systems.futures.rawdata import FuturesRawData
+from systems.rawdata import RawData
 from systems.positionsizing import PositionSizing
 from systems.portfolio import Portfolios
 from systems.accounts.accounts_stage import Account
 
 
 def futures_system(
-        data=None,
-        config=None,
-        trading_rules=arg_not_supplied,
-        log_level="on"):
+    data=None, config=None, trading_rules=arg_not_supplied, log_level="on"
+):
     """
 
     :param data: data object (defaults to reading from csv files)
@@ -44,8 +42,7 @@ def futures_system(
         data = csvFuturesSimData()
 
     if config is None:
-        config = Config(
-            "systems.provided.futures_chapter15.futuresestimateconfig.yaml")
+        config = Config("systems.provided.futures_chapter15.futuresestimateconfig.yaml")
 
     rules = Rules(trading_rules)
 
@@ -54,7 +51,7 @@ def futures_system(
             Account(),
             Portfolios(),
             PositionSizing(),
-            FuturesRawData(),
+            RawData(),
             ForecastCombine(),
             ForecastScaleCap(),
             rules,

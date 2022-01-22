@@ -2,6 +2,8 @@
 Utilities I can't put anywhere else...
 """
 
+import time
+
 from math import copysign, gcd
 from copy import copy
 import sys
@@ -9,12 +11,24 @@ import numpy as np
 import datetime
 import functools
 
+
+def true_if_answer_is_yes(prompt=""):
+    invalid = True
+    while invalid:
+        x = input(prompt)
+        x = x.lower()
+        if x[0] == "y":
+            return True
+        elif x[0] == "n":
+            return False
+        print("Need one of yes/no, Yes/No, y/n, Y/N")
+
+
 def flatten_list(some_list):
-    flattened = [
-        item for sublist in some_list for item in sublist
-    ]
+    flattened = [item for sublist in some_list for item in sublist]
 
     return flattened
+
 
 class not_required_flag(object):
     def __repr__(self):
@@ -42,8 +56,9 @@ def group_dict_from_natural(dict_group):
     if len(dict_group) == 0:
         return dict()
 
-    all_names = sorted(set(sum([dict_group[groupname]
-                                for groupname in dict_group.keys()], [])))
+    all_names = sorted(
+        set(sum([dict_group[groupname] for groupname in dict_group.keys()], []))
+    )
 
     def _return_without(name, group):
         if name in group:
@@ -65,8 +80,7 @@ def group_dict_from_natural(dict_group):
         ans = ans[0]
         return ans
 
-    gdict = dict([(name, _return_group(name, dict_group))
-                  for name in all_names])
+    gdict = dict([(name, _return_group(name, dict_group)) for name in all_names])
 
     return gdict
 
@@ -75,8 +89,6 @@ def str2Bool(x):
     if isinstance(x, bool):
         return x
     return x.lower() in ("t", "true")
-
-
 
 
 def str_of_int(x):
@@ -167,7 +179,6 @@ def value_or_npnan(x, return_value=None):
     return x
 
 
-
 def are_dicts_equal(d1, d2):
     d1_keys = set(d1.keys())
     d2_keys = set(d2.keys())
@@ -178,6 +189,9 @@ def are_dicts_equal(d1, d2):
     if len(same) != len(d1_keys):
         return False
     return True
+
+
+PROGRESS_EXP_FACTOR = 0.9
 
 
 class progressBar(object):
@@ -195,22 +209,84 @@ class progressBar(object):
     """
 
     def __init__(
-            self,
-            range_to_iter,
-            suffix="Progress",
-            toolbar_width=80,
-            show_each_time=False):
+        self,
+        range_to_iter,
+        suffix="Progress",
+        toolbar_width=80,
+        show_each_time=False,
+        show_timings=True,
+    ):
+
+        self._start_time = time.time()
         self.toolbar_width = toolbar_width
         self.current_iter = 0
         self.suffix = suffix
         self.range_to_iter = range_to_iter
         self.range_per_block = range_to_iter / np.float(toolbar_width)
-        self.display_bar()
         self._how_many_blocks_displayed = -1  # will always display first time
         self._show_each_time = show_each_time
+        self._show_timings = show_timings
+
+        self.display_bar()
+
+    def estimated_time_remaining(self):
+        total_iter = self.range_to_iter
+        iter_left = total_iter - self.current_iter
+        time_per_iter = self.current_estimate_of_times
+        if time_per_iter is None:
+            return 0
+
+        return iter_left * time_per_iter
+
+    def update_time_estimate(self):
+        ## don't maintain a list per se, instead exponential
+        time_since_last_call = self.time_since_last_called()
+        current_estimate = self.current_estimate_of_times
+        if current_estimate is None:
+            ## seed
+            current_estimate = time_since_last_call
+        else:
+            current_estimate = ((1 - PROGRESS_EXP_FACTOR) * time_since_last_call) + (
+                PROGRESS_EXP_FACTOR * current_estimate
+            )
+
+        self.current_estimate_of_times = current_estimate
+
+    @property
+    def current_estimate_of_times(self) -> float:
+        current_estimate = getattr(self, "_current_estimate_of_times", None)
+        return current_estimate
+
+    @current_estimate_of_times.setter
+    def current_estimate_of_times(self, current_estimate: float):
+        self._current_estimate_of_times = current_estimate
+
+    def time_since_last_called(self) -> float:
+        time_of_last_call = self.get_and_set_time_of_last_call()
+        current_time = self.current_time
+
+        return current_time - time_of_last_call
+
+    def get_and_set_time_of_last_call(self):
+        time_of_last_iter = copy(getattr(self, "_time_of_last_call", self.start_time))
+        self._time_of_last_call = self.current_time
+
+        return time_of_last_iter
+
+    def elapsed_time(self):
+        return self.current_time - self.start_time
+
+    @property
+    def start_time(self):
+        return self._start_time
+
+    @property
+    def current_time(self):
+        return time.time()
 
     def iterate(self):
         self.current_iter += 1
+        self.update_time_estimate()
         if self.number_of_blocks_changed() or self._show_each_time:
             self.display_bar()
 
@@ -221,10 +297,7 @@ class progressBar(object):
         return int(self.current_iter / self.range_per_block)
 
     def how_many_blocks_left(self):
-        return int(
-            (self.range_to_iter -
-             self.current_iter) /
-            self.range_per_block)
+        return int((self.range_to_iter - self.current_iter) / self.range_per_block)
 
     def number_of_blocks_changed(self):
         original_blocks = self._how_many_blocks_displayed
@@ -236,20 +309,33 @@ class progressBar(object):
             return False
 
     def display_bar(self):
-        percents = round(
-            100.0 *
-            self.current_iter /
-            float(
-                self.range_to_iter),
-            1)
+        percents = round(100.0 * self.current_iter / float(self.range_to_iter), 1)
+        if self._show_timings:
+            time_remaining = self.estimated_time_remaining()
+            time_elapsed = self.elapsed_time()
+            total_est_time = time_elapsed + time_remaining
+            time_str = "(%.1f/%.1f/%.1f secs left/elapsed/total)" % (
+                time_remaining,
+                time_elapsed,
+                total_est_time,
+            )
+        else:
+            time_str = ""
+
         bar = "=" * self.how_many_blocks_had() + "-" * self.how_many_blocks_left()
-        progress_string = "\0\r [%s] %s%s %s" % (
-            bar, percents, "%", self.suffix)
+        progress_string = "\0\r [%s] %s%s %s %s\n" % (
+            bar,
+            percents,
+            "%",
+            self.suffix,
+            time_str,
+        )
         sys.stdout.write(progress_string)
         sys.stdout.flush()
         self._how_many_blocks_displayed = self.how_many_blocks_had()
 
     def finished(self):
+        self.display_bar()
         sys.stdout.write("\n")
 
 
@@ -301,20 +387,6 @@ def get_unique_list(somelist):
 
 
 MISSING_STR = -1
-
-def list_of_items_separated_by_underscores(this_str, result = ()):
-    find_underscore = this_str.find("_")
-    if find_underscore is MISSING_STR:
-        result_as_list = list(result)
-        result_as_list.append(this_str)
-        return result_as_list
-
-    partial_str = this_str[:find_underscore]
-    result = result + tuple([partial_str])
-
-    remaining_str = this_str[find_underscore+1:]
-
-    return list_of_items_separated_by_underscores(remaining_str, result=result)
 
 
 def transfer_object_attributes(named_tuple_object, original_object):
@@ -411,6 +483,7 @@ def np_convert(val):
     :return: val as native type
     """
     return val.item() if isinstance(val, np.generic) else val
+
 
 if __name__ == "__main__":
     import doctest

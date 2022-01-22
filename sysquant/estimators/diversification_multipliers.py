@@ -3,12 +3,14 @@ import numpy as np
 import pandas as pd
 
 from sysquant.estimators.correlations import CorrelationList, correlationEstimate
+from sysquant.optimisation.weights import portfolioWeights
+
 
 def diversification_multiplier_from_list(
     correlation_list: CorrelationList,
-        weight_df: pd.DataFrame,
-        ewma_span: int=125,
-        **kwargs
+    weight_df: pd.DataFrame,
+    ewma_span: int = 125,
+    **kwargs
 ) -> pd.Series:
     # FIXME THE FREQUENCY OF WEIGHT_DF MAY NOT MATCH EMWA_SPAN WHICH IS UNITLES IN ANY CASE...
     """
@@ -34,15 +36,12 @@ def diversification_multiplier_from_list(
     # align weights to corr list columns
     weight_df = weight_df[correlation_list.column_names]
 
-    ref_periods = [
-        fit_period.period_start for fit_period in correlation_list.fit_dates]
+    ref_periods = [fit_period.period_start for fit_period in correlation_list.fit_dates]
 
     # here's where we stack up the answers
     div_mult_vector = []
 
-    for (corrmatrix, start_of_period) in zip(
-        correlation_list.corr_list, ref_periods
-    ):
+    for (corrmatrix, start_of_period) in zip(correlation_list.corr_list, ref_periods):
 
         weight_slice = weight_df[:start_of_period]
         if weight_slice.shape[0] == 0:
@@ -51,7 +50,8 @@ def diversification_multiplier_from_list(
             continue
 
         # take the current weights and work out the DM
-        weights = list(weight_slice.iloc[-1, :].values)
+        weights_dict = weight_slice.iloc[-1].to_dict()
+        weights = portfolioWeights(weights_dict)
         div_multiplier = diversification_mult_single_period(
             corrmatrix, weights, **kwargs
         )
@@ -70,38 +70,25 @@ def diversification_multiplier_from_list(
     return div_mult_df_smoothed
 
 
-def diversification_mult_single_period(corrmatrix: correlationEstimate,
-                                       weights: list,
-                                       dm_max: float=2.5) -> float:
+def diversification_mult_single_period(
+    corrmatrix: correlationEstimate, weights: portfolioWeights, dm_max: float = 2.5
+) -> float:
     """
     Given N assets with a correlation matrix of H and  weights W summing to 1,
     the diversification multiplier will be 1 / [ ( W x H x WT ) 1/2 ]
 
-    :param corrmatrix: Correlation matrix
-    :type corrmatrix: np.array square, 2-dim
-
-    :param weights: Weights of assets
-    :type weights: list of floats (aligned with corrmatrix)
-
-    :param dm_max: Max value
-    :type dm_max: float
-
-    :returns: float
-
-    >>> corrmatrix=np.array([[1.0,0.0], [0.0,1.0]])
-    >>> weights=[.5,.5]
-    >>> diversification_mult_single_period(corrmatrix, weights) # square root of two
-    1.414213562373095
     """
+    try:
+        risk = weights.portfolio_stdev(corrmatrix)
+    except:
+        risk = np.nan
 
-    # edge cases...
-    if all([x == 0.0 for x in list(weights)]) or np.all(np.isnan(weights)):
+    if np.isnan(risk):
         return 1.0
 
-    weights = np.array(weights, ndmin=2)
+    if risk < 0.0000001:
+        return 1.0
 
-    dm = np.min([1.0 / (float(np.dot(np.dot(weights, corrmatrix.values),
-                                     weights.transpose())) ** 0.5), dm_max, ])
+    dm = np.min([1.0 / risk, dm_max])
 
     return dm
-

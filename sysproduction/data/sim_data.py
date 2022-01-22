@@ -6,15 +6,22 @@ from sysdata.arctic.arctic_adjusted_prices import arcticFuturesAdjustedPricesDat
 from sysdata.arctic.arctic_multiple_prices import arcticFuturesMultiplePricesData
 from sysdata.arctic.arctic_spotfx_prices import arcticFxPricesData
 from sysdata.mongodb.mongo_futures_instruments import mongoFuturesInstrumentData
+from sysdata.mongodb.mongo_roll_data import mongoRollParametersData
 
 
-def get_sim_data_object_for_production(data=arg_not_supplied):
+def get_sim_data_object_for_production(data=arg_not_supplied) -> dataBlob:
     # Check data has the right elements to do this
     if data is arg_not_supplied:
         data = dataBlob()
 
-    data.add_class_list([arcticFuturesAdjustedPricesData, arcticFuturesMultiplePricesData,
-                         arcticFxPricesData, mongoFuturesInstrumentData])
-
+    data.add_class_list(
+        [
+            arcticFuturesAdjustedPricesData,
+            arcticFuturesMultiplePricesData,
+            arcticFxPricesData,
+            mongoFuturesInstrumentData,
+            mongoRollParametersData,
+        ]
+    )
 
     return dbFuturesSimData(data)

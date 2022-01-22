@@ -38,7 +38,9 @@ class futuresInstrumentWithIBConfigData(object):
         return self.ib_data.symbol
 
 
-def ib_futures_instrument(futures_instrument_with_ib_data: futuresInstrumentWithIBConfigData) -> Future:
+def ib_futures_instrument(
+    futures_instrument_with_ib_data: futuresInstrumentWithIBConfigData,
+) -> Future:
     """
     Get an IB contract which is NOT specific to a contract date
     Used for getting expiry chains
@@ -54,7 +56,8 @@ def ib_futures_instrument(futures_instrument_with_ib_data: futuresInstrumentWith
     if ib_data.ibMultiplier is NOT_REQUIRED_FOR_IB:
         pass
     else:
-        ibcontract.multiplier = int(ib_data.ibMultiplier)
+
+        ibcontract.multiplier = _resolve_multiplier(ib_data.ibMultiplier)
 
     if ib_data.currency is NOT_REQUIRED_FOR_IB:
         pass
@@ -62,3 +65,13 @@ def ib_futures_instrument(futures_instrument_with_ib_data: futuresInstrumentWith
         ibcontract.currency = ib_data.currency
 
     return ibcontract
+
+
+def _resolve_multiplier(multiplier_passed):
+    multiplier = float(multiplier_passed)
+    if multiplier < 1.0:
+        multiplier = str(float(multiplier_passed))
+    else:
+        multiplier = str(int(multiplier_passed))
+
+    return multiplier

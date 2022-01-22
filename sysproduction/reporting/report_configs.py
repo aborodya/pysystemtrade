@@ -1,10 +1,11 @@
 from copy import copy
 
-from sysproduction.reporting.roll_report import ALL_ROLL_INSTRUMENTS
+from sysproduction.reporting.data.rolls import ALL_ROLL_INSTRUMENTS
+
 
 class reportConfig(object):
     def __init__(self, title, function, output="console", **kwargs):
-        assert output in ["console", "email"]
+        assert output in ["console", "email", "file"]
         self.title = title
         self.function = function
         self.output = output
@@ -49,7 +50,7 @@ roll_report_config = reportConfig(
 )
 
 daily_pandl_report_config = reportConfig(
-    title="One day P&L report",
+    title="P&L report",
     function="sysproduction.reporting.pandl_report.pandl_info",
     calendar_days_back=1,
 )
@@ -71,8 +72,18 @@ strategy_report_config = reportConfig(
 )
 
 risk_report_config = reportConfig(
-    title= "Risk report",
-    function="sysproduction.reporting.risk_report.risk_report"
+    title="Risk report", function="sysproduction.reporting.risk_report.risk_report"
+)
+
+liquidity_report_config = reportConfig(
+    title="Liquidity report",
+    function="sysproduction.reporting.liquidity_report.liquidity_report",
+)
+
+costs_report_config = reportConfig(
+    title="Costs report",
+    function="sysproduction.reporting.costs_report.costs_report",
+    calendar_days_back=250,
 )
 
 ## The reports will be run in this order
@@ -82,6 +93,8 @@ all_configs = dict(
     reconcile_report=reconcile_report_config,
     trade_report=trade_report_config,
     strategy_report=strategy_report_config,
-    risk_report = risk_report_config,
-    status_report = status_report_config
+    risk_report=risk_report_config,
+    status_report=status_report_config,
+    liquidity_report=liquidity_report_config,
+    costs_report=costs_report_config,
 )

@@ -7,32 +7,52 @@ from collections import namedtuple
 from syscore.genutils import quickTimer
 from syscore.objects import arg_not_supplied, missing_data
 
+TICK_REQUIRED_COLUMNS = ["priceAsk", "priceBid", "sizeAsk", "sizeBid"]
 
 class dataFrameOfRecentTicks(pd.DataFrame):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         columns = self.columns
         sorted_columns = sorted(columns)
-        required_columns = ["priceAsk", "priceBid" , "sizeAsk", "sizeBid"]
-        try:
-            assert all([x==y for x, y in zip(sorted_columns, required_columns)])
-        except:
-            raise Exception("historical ticks should have columns %s" % str(required_columns))
 
-def analyse_tick_data_frame(tick_data: dataFrameOfRecentTicks, qty: int,
-                            forward_fill:bool = False,
-                            replace_qty_nans=False):
+        try:
+            assert all([x == y for x, y in zip(sorted_columns, TICK_REQUIRED_COLUMNS)])
+        except:
+            raise Exception(
+                "historical ticks should have columns %s" % str(TICK_REQUIRED_COLUMNS)
+            )
+
+    def average_bid_offer_spread(self, remove_negative=True) -> float:
+        return average_bid_offer_spread(self, remove_negative=remove_negative)
+
+    @classmethod
+    def create_empty(dataFrameOfRecentTicks):
+        return dataFrameOfRecentTicks(pd.DataFrame(
+            columns = TICK_REQUIRED_COLUMNS
+        ))
+
+    def is_empty(self) -> bool:
+        return len(self)==0
+
+def analyse_tick_data_frame(
+    tick_data: dataFrameOfRecentTicks,
+    qty: int,
+    forward_fill: bool = False,
+    replace_qty_nans=False,
+):
     if tick_data is missing_data:
         return missing_data
+
+    if tick_data.is_empty():
+        return missing_data
+
     tick = extract_final_row_of_tick_data_frame(tick_data, forward_fill=forward_fill)
     results = analyse_tick(tick, qty, replace_qty_nans=replace_qty_nans)
 
     return results
 
 
-oneTick = namedtuple(
-    "oneTick", [
-        "bid_price", "ask_price", "bid_size", "ask_size"])
+oneTick = namedtuple("oneTick", ["bid_price", "ask_price", "bid_size", "ask_size"])
 analysisTick = namedtuple(
     "analysisTick",
     [
@@ -50,7 +70,18 @@ analysisTick = namedtuple(
 empty_tick = oneTick(np.nan, np.nan, np.nan, np.nan)
 
 
-def extract_final_row_of_tick_data_frame(tick_data: pd.DataFrame, forward_fill = False) -> oneTick:
+def extract_final_row_of_tick_data_frame(
+    tick_data: pd.DataFrame, forward_fill=False
+) -> oneTick:
+    final_row = extract_nth_row_of_tick_data_frame(
+        tick_data, row_id=-1, forward_fill=forward_fill
+    )
+    return final_row
+
+
+def extract_nth_row_of_tick_data_frame(
+    tick_data: pd.DataFrame, row_id: int, forward_fill=False
+) -> oneTick:
     if len(tick_data) == 0:
         return empty_tick
     if forward_fill:
@@ -58,16 +89,34 @@ def extract_final_row_of_tick_data_frame(tick_data: pd.DataFrame, forward_fill =
     else:
         filled_data = copy(tick_data)
 
-    bid_price = tick_data.priceBid[-1]
-    ask_price = tick_data.priceAsk[-1]
-    bid_size = tick_data.sizeBid[-1]
-    ask_size = tick_data.sizeAsk[-1]
+    bid_price = filled_data.priceBid[row_id]
+    ask_price = filled_data.priceAsk[row_id]
+    bid_size = filled_data.sizeBid[row_id]
+    ask_size = filled_data.sizeAsk[row_id]
 
     return oneTick(bid_price, ask_price, bid_size, ask_size)
 
+
+def average_bid_offer_spread(
+    tick_data: dataFrameOfRecentTicks, remove_negative: bool = True
+) -> float:
+    if tick_data.is_empty():
+        return missing_data
+    all_spreads = tick_data.priceAsk - tick_data.priceBid
+    if remove_negative:
+        all_spreads[all_spreads < 0] = np.nan
+    average_spread = all_spreads.mean(skipna=True)
+
+    if np.isnan(average_spread):
+        return missing_data
+
+    return average_spread
+
+
 VERY_LARGE_IMBALANCE = 9999
 
-def analyse_tick(tick: oneTick, qty: int, replace_qty_nans = False) -> analysisTick:
+
+def analyse_tick(tick: oneTick, qty: int, replace_qty_nans=False) -> analysisTick:
     mid_price = np.mean([tick.ask_price, tick.bid_price])
     spread = tick.ask_price - tick.bid_price
 
@@ -94,7 +143,7 @@ def analyse_tick(tick: oneTick, qty: int, replace_qty_nans = False) -> analysisT
     # If this number goes significantly above 1 it suggests there is significant buying pressure
     # If we're selling this would be ask quantity divided by bid quantity
     # Again, if it goes above 1 suggests more selling pressure
-    if side_qty ==0:
+    if side_qty == 0:
         imbalance_ratio = VERY_LARGE_IMBALANCE
     else:
         imbalance_ratio = offside_qty / side_qty
@@ -112,11 +161,13 @@ def analyse_tick(tick: oneTick, qty: int, replace_qty_nans = False) -> analysisT
 
     return results
 
+
 def _zero_replace_nan(x):
     if np.isnan(x):
         return 0
     else:
         return x
+
 
 class tickerObject(object):
     """
@@ -125,12 +176,11 @@ class tickerObject(object):
     We wrap it in this so have standard methods
     """
 
-    def __init__(self, ticker, qty: int=arg_not_supplied):
+    def __init__(self, ticker, qty: int = arg_not_supplied):
         # 'ticker' will depend on the implementation
         self._ticker = ticker
         self._qty = qty
         self._ticks = []
-
 
     @property
     def ticker(self):
@@ -173,7 +223,6 @@ class tickerObject(object):
     def add_tick(self, tick: oneTick):
         self._ticks.append(tick)
 
-
     def current_tick(self, require_refresh=True) -> oneTick:
         if require_refresh:
             self.refresh()
@@ -189,9 +238,12 @@ class tickerObject(object):
 
         return tick
 
-    def analyse_for_tick(self, tick: oneTick=arg_not_supplied,
-                         qty: int=arg_not_supplied,
-                         replace_qty_nans=False):
+    def analyse_for_tick(
+        self,
+        tick: oneTick = arg_not_supplied,
+        qty: int = arg_not_supplied,
+        replace_qty_nans=False,
+    ):
         if qty is arg_not_supplied:
             qty = self.qty
 
@@ -206,15 +258,19 @@ class tickerObject(object):
         return results
 
     def wait_for_valid_bid_and_ask_and_analyse_current_tick(
-            self, qty: int = arg_not_supplied, wait_time_seconds: int=10) -> oneTick:
+        self, qty: int = arg_not_supplied, wait_time_seconds: int = 10
+    ) -> oneTick:
 
-        current_tick = self.wait_for_valid_bid_and_ask_and_return_current_tick(wait_time_seconds=wait_time_seconds)
+        current_tick = self.wait_for_valid_bid_and_ask_and_return_current_tick(
+            wait_time_seconds=wait_time_seconds
+        )
         analysis = self.analyse_for_tick(current_tick, qty=qty)
 
         return analysis
 
     def wait_for_valid_bid_and_ask_and_return_current_tick(
-            self, wait_time_seconds: int=10) -> oneTick:
+        self, wait_time_seconds: int = 10
+    ) -> oneTick:
         waiting = True
         timer = quickTimer(wait_time_seconds)
         while waiting:
@@ -298,8 +354,7 @@ class tickerObject(object):
         raise NotImplementedError
 
 
-
-def adverse_price_movement(qty: int, price_old:float, price_new:float) -> bool:
+def adverse_price_movement(qty: int, price_old: float, price_new: float) -> bool:
     if qty > 0:
         if price_new > price_old:
             return True
@@ -311,4 +366,3 @@ def adverse_price_movement(qty: int, price_old:float, price_new:float) -> bool:
             return True
         else:
             return False
-

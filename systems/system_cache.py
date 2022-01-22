@@ -33,12 +33,8 @@ class cacheRef(object):
     """
 
     def __init__(
-            self,
-            stage_name,
-            itemname,
-            instrument_code=ALL_KEYNAME,
-            flags="",
-            keyname=""):
+        self, stage_name, itemname, instrument_code=ALL_KEYNAME, flags="", keyname=""
+    ):
 
         self.stage_name = stage_name
         self.itemname = itemname
@@ -65,8 +61,7 @@ class cacheRef(object):
         return tuple(v for k, v in sorted(self.__dict__.items()))
 
     def __eq__(self, other):
-        return isinstance(
-            other, self.__class__) and self.__key() == other.__key()
+        return isinstance(other, self.__class__) and self.__key() == other.__key()
 
     def __hash__(self):
         return hash(self.__key())
@@ -83,13 +78,13 @@ class listOfCacheRefs(list):
 
     def filter_by_stage_name(self, stage_name):
         new_list = [
-            cache_ref for cache_ref in self if cache_ref.stage_name == stage_name]
+            cache_ref for cache_ref in self if cache_ref.stage_name == stage_name
+        ]
 
         return listOfCacheRefs(new_list)
 
     def filter_by_itemname(self, itemname):
-        new_list = [
-            cache_ref for cache_ref in self if cache_ref.itemname == itemname]
+        new_list = [cache_ref for cache_ref in self if cache_ref.itemname == itemname]
 
         return listOfCacheRefs(new_list)
 
@@ -103,8 +98,7 @@ class listOfCacheRefs(list):
         return listOfCacheRefs(new_list)
 
     def filter_by_keyname(self, keyname):
-        new_list = [
-            cache_ref for cache_ref in self if cache_ref.keyname == keyname]
+        new_list = [cache_ref for cache_ref in self if cache_ref.keyname == keyname]
 
         return listOfCacheRefs(new_list)
 
@@ -302,8 +296,7 @@ class systemCache(dict):
         """
 
         cache_ref_list = self.get_items_with_data()
-        cache_ref_list = cache_ref_list.filter_by_instrument_code(
-            instrument_code)
+        cache_ref_list = cache_ref_list.filter_by_instrument_code(instrument_code)
 
         return cache_ref_list
 
@@ -357,7 +350,8 @@ class systemCache(dict):
         """
 
         cache_ref_list = [
-            cache_ref for cache_ref in cache_ref_list if not self[cache_ref].protected()]
+            cache_ref for cache_ref in cache_ref_list if not self[cache_ref].protected()
+        ]
 
         return listOfCacheRefs(cache_ref_list)
 
@@ -380,10 +374,7 @@ class systemCache(dict):
             cache_ref_list, delete_protected=delete_protected
         )
 
-    def delete_items_for_instrument(
-            self,
-            instrument_code,
-            delete_protected=False):
+    def delete_items_for_instrument(self, instrument_code, delete_protected=False):
         """
         Delete everything in the system relating to a particular instrument_code
 
@@ -424,8 +415,7 @@ class systemCache(dict):
 
         """
 
-        self.delete_items_for_instrument(
-            ALL_KEYNAME, delete_protected=delete_protected)
+        self.delete_items_for_instrument(ALL_KEYNAME, delete_protected=delete_protected)
 
     def delete_all_items(self, delete_protected=False):
         """
@@ -443,8 +433,7 @@ class systemCache(dict):
             cache_ref_list, delete_protected=delete_protected
         )
 
-    def delete_elements_in_cache_ref_list(
-            self, cache_ref_list, delete_protected=False):
+    def delete_elements_in_cache_ref_list(self, cache_ref_list, delete_protected=False):
         """
         Delete everything in the cache
 
@@ -456,8 +445,7 @@ class systemCache(dict):
         """
 
         if not delete_protected:
-            cache_ref_list = self.cache_ref_list_with_protected_removed(
-                cache_ref_list)
+            cache_ref_list = self.cache_ref_list_with_protected_removed(cache_ref_list)
 
         self._delete_elements_in_cache_ref_list_dangerous(cache_ref_list)
 
@@ -488,12 +476,7 @@ class systemCache(dict):
         if cache_ref in self:
             del self[cache_ref]
 
-    def set_item_in_cache(
-            self,
-            value,
-            cache_ref,
-            protected=False,
-            not_pickable=False):
+    def set_item_in_cache(self, value, cache_ref, protected=False, not_pickable=False):
         """
         Set an item in a cache to a specific value.
 
@@ -542,6 +525,7 @@ class systemCache(dict):
         protected=False,
         not_pickable=False,
         instrument_classify=True,
+        use_arg_names = True,
         **kwargs
     ):
         """
@@ -575,11 +559,11 @@ class systemCache(dict):
         # Turn all the arguments into things we can use to identify the cache
         # element uniquely
         cache_ref = self.cache_ref(
-            func,
-            this_stage,
-            *args,
+            func, this_stage, *args,
+            use_arg_names=use_arg_names,
             instrument_classify=instrument_classify,
-            **kwargs)
+            **kwargs
+        )
 
         value = self._get_item_from_cache(cache_ref)
 
@@ -588,14 +572,14 @@ class systemCache(dict):
             # 'self'
             value = func(this_stage, *args, **kwargs)
             self.set_item_in_cache(
-                value,
-                cache_ref,
-                protected=protected,
-                not_pickable=not_pickable)
+                value, cache_ref, protected=protected, not_pickable=not_pickable
+            )
 
         return value
 
-    def cache_ref(self, func, this_stage, *args, instrument_classify=True, **kwargs):
+    def cache_ref(self, func, this_stage, *args,
+                  use_arg_names = True,
+                  instrument_classify=True, **kwargs):
         """
         Return cache key
 
@@ -628,10 +612,12 @@ class systemCache(dict):
             list_of_codes = []
 
         (instrument_code, keyname) = resolve_args_to_code_and_key(
-            args, list_of_codes
+            args, list_of_codes,
+            use_arg_names = use_arg_names
         )  # instrument involved, and/or other keys eg rule name
         flags = resolve_kwargs_to_str(
-            kwargs
+            kwargs,
+            use_arg_names = use_arg_names
         )  # used mostly in accounts, eg to identify delayed returns
 
         cache_ref = cacheRef(
@@ -641,7 +627,8 @@ class systemCache(dict):
         return cache_ref
 
 
-def resolve_args_to_code_and_key(args, list_of_codes):
+def resolve_args_to_code_and_key(args, list_of_codes,
+                                 use_arg_names = True):
     """
     Resolves a list of placed args for a function
     Pulls out the first arg that is an instrument_code (in list_of_codes)
@@ -651,7 +638,11 @@ def resolve_args_to_code_and_key(args, list_of_codes):
     :return: (instrument_code, keyname)
     """
     keyname_list = []
-    args_to_process = list(args)
+    if use_arg_names:
+        args_to_process = list(args)
+    else:
+        args_to_process = []
+
     instrument_code = None
 
     while len(args_to_process) > 0:
@@ -680,7 +671,7 @@ def resolve_args_to_code_and_key(args, list_of_codes):
     return (instrument_code, keyname)
 
 
-def resolve_kwargs_to_str(kwargs):
+def resolve_kwargs_to_str(kwargs, use_arg_names:bool = True):
     """
     Turn a list of named arguments into a flag string representing them,
     eg resolve_flags_to_str(dict(a=1, b=2)
@@ -689,15 +680,16 @@ def resolve_kwargs_to_str(kwargs):
     :param kwargs: dict of arguments passed to some function
     :return: str
     """
+    if not use_arg_names:
+        return ""
 
     def resolve_individual_flag(single_flag, kwargs):
         argvalue = str(kwargs[single_flag])
         return "%s=%s" % (single_flag, str(argvalue))
 
     long_flag_string = [
-        resolve_individual_flag(
-            single_flag,
-            kwargs) for single_flag in kwargs.keys()]
+        resolve_individual_flag(single_flag, kwargs) for single_flag in kwargs.keys()
+    ]
 
     return ", ".join(long_flag_string)
 
@@ -770,7 +762,9 @@ def base_system_cache(protected=False, not_pickable=False):
                 protected=protected,
                 not_pickable=not_pickable,
                 instrument_classify=False,
-                **kwargs
+                use_arg_names = False,
+                **kwargs,
+
             )
 
             return ans

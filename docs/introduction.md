@@ -29,6 +29,16 @@ data.get_instrument_list()
 ['CORN', 'LEANHOG', 'LIVECOW', 'SOYBEAN', 'WHEAT', 'KR10', 'KR3', 'BOBL', 'BTP', 'BUND', 'OAT', 'SHATZ', 'US10', 'US2', 'US20', 'US5', 'V2X', 'VIX', 'KOSPI', 'AEX', 'CAC', 'SMI', 'NASDAQ', 'SP500', 'AUD', 'EUR', 'GBP', 'JPY', 'MXP', 'NZD', 'COPPER', 'GOLD', 'PALLAD', 'PLAT', 'CRUDE_W', 'GAS_US', 'EDOLLAR', 'EUROSTX']
 ```
 
+Not all the instruments are easily identifiable
+
+```
+data.get_instrument_object_with_meta_data("MUMMY")
+```
+
+```
+futuresInstrumentWithMetaData(instrument=MUMMY, meta_data=instrumentMetaData(Description='TSE Mothers Index', Pointsize=1000.0, Currency='JPY', AssetClass='Equity', Slippage=0.5, PerBlock=50.0, Percentage=0.0, PerTrade=0.0))
+```
+
 And what kind of data can we get for them?
 
 ```python
@@ -46,13 +56,13 @@ Name: price, dtype: float64
 
 *I'll update the data regularly, as well as including methods for you to get your own data from different sources*
 
-*Technical note: This is the 'back-adjusted' price for the future, formed from stiching adjacent contracts together using the 'panama' method*
+*Technical note: This is the 'back-adjusted' price for the future, formed from stitching adjacent contracts together using the 'panama' method*
 
 `data` objects behave a bit like dicts (though they don't formally inherit from them). So these both work:
 
 ```python
 data.keys() ## equivalent to data.get_instrument_list
-data['SP500'] ## equivalent to data.get_instrument_price
+data['SP500_micro'] ## equivalent to data.get_instrument_price
 ```
 
 Price data is useful, but is there any other data available? For futures, yes, we can get the data we need to implement a carry rule:
@@ -82,7 +92,7 @@ from sysquant.estimators.vol import robust_vol_calc
 
 def calc_ewmac_forecast(price, Lfast, Lslow=None):
     """
-    Calculate the ewmac trading fule forecast, given a price and EWMA speeds Lfast, Lslow and vol_lookback
+    Calculate the ewmac trading rule forecast, given a price and EWMA speeds Lfast, Lslow and vol_lookback
 
     """
     ## price: This is the stitched price series
@@ -157,7 +167,7 @@ account.percent.stats()
   ('t_stat', '2.929'),
   ('p_value', '0.003405')],
  ('You can also plot / print:',
-  ['rolling_ann_std', 'drawdown', 'curve', 'percent', 'cumulative'])]
+  ['rolling_ann_std', 'drawdown', 'curve', 'percent'])]
 ```
 
 Looks like we did make a few bucks. `account`, by the way inherits from a pandas data frame. Here are some other things we can do with it:
@@ -171,6 +181,7 @@ account.weekly ## weekly returns (also daily [default], monthly, annual)
 account.gross.ann_mean() ## annual mean for gross returns, also costs (there are none in this simple example)
 ```
 
+[Here](notebooks/introduction_with_fxdata.ipynb) you can find a modified version of this example using IB data instead of pre-baked CSV data files.
 
 ## A simple system
 
@@ -178,7 +189,7 @@ account.gross.ann_mean() ## annual mean for gross returns, also costs (there are
 
 This is all very well, but what we probably want to do is build a trading **system** composed of several trading rules, and a few more instruments.
 
-A system consists of some `data` (which we've already seen), a number of processing *stages*, and optionally a configuration to modify each of the stages behaves.
+A system consists of some `data` (which we've already seen), a number of processing *stages*, and optionally a configuration to modify how each of the stages behaves.
 
 A full list of stages would include:
 
@@ -307,7 +318,7 @@ Now let's introduce the idea of **config** objects. A `config` or configuration 
 Configuration objects can be created on the fly or by reading in files written in yaml (which we'll talk about below). A configuration object is just a collection of attributes. We create them interactively like so:
 
 ```python
-from sysdata.configdata import Config
+from sysdata.config.configdata import Config
 my_config=Config()
 my_config
 ```
@@ -335,6 +346,10 @@ Notice the differences from before:
 
 *Note if you'd passed the dict of trading rules into Rules()* **and** *into the config, only the former would be used*
 
+Why do we have this alternative method of specifying trading rules? Indeed why the option of using config at all. The answer it's that's a much more robust method for defining system behaviour than having pages of scripts defining how the system behaves. This is especially true in a production system. Why do we need an empty instance of Rules()? Well effectively we build our System object up from building blocks like Rules. These are usually just empty instances of a given class with no arguments passed, which are controlled by the contents of the configuration object also passed to system.
+ 
+So in a sense passing Rules(dict(....)) is not the normal behaviour, it's just sometimes nice to be able to do this so I allow it.
+
 Now these trading rules aren't producing forecasts that are correctly scaled (with an average absolute value of 10), and they don't have the cap of 20 that I recommend. To fix this we need to add another *stage* to our system: forecast scaling and capping.
 Stages are added by including extra objects in the list which is the first argument passed to `System`. The order of these doesn't matter.
 
@@ -344,9 +359,9 @@ We could estimate these on a rolling out of sample basis:
 from systems.forecast_scale_cap import ForecastScaleCap
 
 
-## By default we pool esimates across instruments. It's worth telling the system what instruments we want to use:
+## By default we pool estimates across instruments. It's worth telling the system what instruments we want to use:
 #
-my_config.instruments=["EDOLLAR", "US10", "EDOLLAR", "CORN", "SP500"]
+my_config.instruments=["EDOLLAR", "US10", "CORN", "SP500_micro"]
 
 ## this parameter ensures we estimate:
 my_config.use_forecast_scale_estimates=True
@@ -433,6 +448,8 @@ Alternatively you can estimate div. multipliers, and weights.
 Note: Since we need to know the performance of different trading rules, we need to include an Accounts stage to calculate these which in turn uses position sizing and raw data:
 
 ```python
+from systems.rawdata import RawData
+from systems.positionsizing import PositionSizing
 from systems.accounts.accounts_stage import Account
 combiner = ForecastCombine()
 raw_data = RawData()
@@ -546,7 +563,7 @@ print(my_system.portfolio.get_instrument_diversification_multiplier())
 ```
 
 ```
-                CORN   EDOLLAR     SP500      US10
+                CORN   EDOLLAR     SP500_micro      US10
 2016-05-05  0.273715  0.245994  0.281982  0.198309
 2016-05-06  0.273715  0.245994  0.281982  0.198309
 2016-05-09  0.273715  0.245994  0.281982  0.198309
@@ -568,7 +585,7 @@ Alternatively we can just make up some instrument weights, and diversification m
 *Again if we really couldn't be bothered, this would default to equal weights and 1.0 respectively*
 
 ```python
-my_config.instrument_weights=dict(US10=.1, EDOLLAR=.4, CORN=.3, SP500=.8)
+my_config.instrument_weights=dict(US10=.1, EDOLLAR=.4, CORN=.3, SP500_micro=.8)
 my_config.instrument_div_multiplier=1.5
 my_config.use_instrument_weight_estimates = False
 my_config.use_instrument_div_mult_estimates = False
@@ -620,8 +637,8 @@ For more see the costs and accountCurve section of the userguide.
 To speed things up you can also pass a dictionary to `Config()`. To reproduce the setup we had above we'd make a dict like so:
 
 ```python
-from sysdata.configdata import Config
-my_config=Config(dict(trading_rules=dict(ewmac8=ewmac_8, ewmac32=ewmac_32), instrument_weights=dict(US10=.1, EDOLLAR=.4, CORN=.3, SP500=.2), instrument_div_multiplier=1.5, forecast_scalars=dict(ewmac8=5.3, ewmac32=2.65), forecast_weights=dict(ewmac8=0.5, ewmac32=0.5), forecast_div_multiplier=1.1
+from sysdata.config.configdata import Config
+my_config=Config(dict(trading_rules=dict(ewmac8=ewmac_8, ewmac32=ewmac_32), instrument_weights=dict(US10=.1, EDOLLAR=.4, CORN=.3, SP500_micro=.2), instrument_div_multiplier=1.5, forecast_scalars=dict(ewmac8=5.3, ewmac32=2.65), forecast_weights=dict(ewmac8=0.5, ewmac32=0.5), forecast_div_multiplier=1.1
 ,percentage_vol_target=25, notional_trading_capital=500000, base_currency="GBP"))
 my_config
 ```
@@ -673,7 +690,7 @@ my_system.portfolio.get_notional_position("EDOLLAR").tail(5)
 By default this has loaded the same data and read the config from the same yaml file. However we can also do this manually, allowing us to use new `data` and a modified `config` with a pre-baked system.
 
 ```python
-from sysdata.configdata import Config
+from sysdata.config.configdata import Config
 from sysdata.sim.csv_futures_sim_data import csvFuturesSimData
 
 my_config=Config("systems.provided.example.simplesystemconfig.yaml")

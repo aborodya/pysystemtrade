@@ -1,4 +1,5 @@
 import matplotlib
+
 matplotlib.use("TkAgg")
 """
 
@@ -31,6 +32,14 @@ data can also behave in a dict like manner (though it's not a dict)
 
 print(data["VIX"])
 print(data.keys())
+
+"""
+Not all the instruments are easily identifiable
+"""
+
+print(data.get_instrument_object_with_meta_data("MUMMY"))
+
+
 """
 
 ... however this will only access prices
@@ -56,7 +65,7 @@ from sysquant.estimators.vol import robust_vol_calc
 
 def calc_ewmac_forecast(price, Lfast, Lslow=None):
     """
-    Calculate the ewmac trading fule forecast, given a price and EWMA speeds
+    Calculate the ewmac trading rule forecast, given a price and EWMA speeds
     Lfast, Lslow and vol_lookback
 
     """
@@ -104,8 +113,8 @@ Did we make money?
 
 from systems.accounts.account_forecast import pandl_for_instrument_forecast
 
-account = pandl_for_instrument_forecast(forecast=ewmac, price = price)
-account2 = pandl_for_instrument_forecast(forecast=ewmac, price = price)
+account = pandl_for_instrument_forecast(forecast=ewmac, price=price)
+account2 = pandl_for_instrument_forecast(forecast=ewmac, price=price)
 
 account.curve()
 

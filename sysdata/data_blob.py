@@ -10,16 +10,17 @@ from syslogdiag.logger import logger
 
 from sysdata.mongodb.mongo_IB_client_id import mongoIbBrokerClientIdData
 
+
 class dataBlob(object):
     def __init__(
         self,
-        class_list: list=arg_not_supplied,
-        log_name: str="",
-        csv_data_paths: dict=arg_not_supplied,
-        ib_conn: connectionIB=arg_not_supplied,
-        mongo_db: mongoDb=arg_not_supplied,
-        log: logger=arg_not_supplied,
-        keep_original_prefix: bool=False,
+        class_list: list = arg_not_supplied,
+        log_name: str = "",
+        csv_data_paths: dict = arg_not_supplied,
+        ib_conn: connectionIB = arg_not_supplied,
+        mongo_db: mongoDb = arg_not_supplied,
+        log: logger = arg_not_supplied,
+        keep_original_prefix: bool = False,
     ):
         """
         Set up of a data pipeline with standard attribute names, logging, links to DB etc
@@ -77,15 +78,16 @@ class dataBlob(object):
     def __repr__(self):
         return "dataBlob with elements: %s" % ",".join(self._attr_list)
 
-
     def add_class_list(self, class_list: list):
         for class_object in class_list:
             self.add_class_object(class_object)
 
     def add_class_object(self, class_object):
-        resolved_instance = self._get_resolved_instance_of_class(class_object)
         class_name = get_class_name(class_object)
-        self._resolve_names_and_add(resolved_instance, class_name)
+        attr_name = self._get_new_name(class_name)
+        if not self._already_existing_class_name(attr_name):
+            resolved_instance = self._get_resolved_instance_of_class(class_object)
+            self._resolve_names_and_add(resolved_instance, class_name)
 
     def _get_resolved_instance_of_class(self, class_object):
         class_adding_method = self._get_class_adding_method(class_object)
@@ -93,15 +95,20 @@ class dataBlob(object):
 
         return resolved_instance
 
-
     def _get_class_adding_method(self, class_object):
         prefix = self._get_class_prefix(class_object)
-        class_dict = dict(ib = self._add_ib_class, csv = self._add_csv_class, arctic = self._add_arctic_class,
-                          mongo = self._add_mongo_class)
+        class_dict = dict(
+            ib=self._add_ib_class,
+            csv=self._add_csv_class,
+            arctic=self._add_arctic_class,
+            mongo=self._add_mongo_class,
+        )
 
         method_to_add_with = class_dict.get(prefix, None)
         if method_to_add_with is None:
-            error_msg = "Don't know how to handle object named %s" % get_class_name(class_object)
+            error_msg = "Don't know how to handle object named %s" % get_class_name(
+                class_object
+            )
             self._raise_and_log_error(error_msg)
 
         return method_to_add_with
@@ -116,41 +123,47 @@ class dataBlob(object):
     def _add_ib_class(self, class_object):
         log = self._get_specific_logger(class_object)
         try:
-            resolved_instance = class_object(self.ib_conn, log = log)
+            resolved_instance = class_object(self.ib_conn, log=log)
         except Exception as e:
-                class_name = get_class_name(class_object)
-                msg = (
-                        "Error %s couldn't evaluate %s(self.ib_conn, log = self.log.setup(component = %s)) This might be because (a) IB gateway not running, or (b) import is missing\
-                         or (c) arguments don't follow pattern" % (str(e), class_name, class_name))
-                self._raise_and_log_error(msg)
+            class_name = get_class_name(class_object)
+            msg = (
+                "Error %s couldn't evaluate %s(self.ib_conn, log = self.log.setup(component = %s)) This might be because (a) IB gateway not running, or (b) import is missing\
+                         or (c) arguments don't follow pattern"
+                % (str(e), class_name, class_name)
+            )
+            self._raise_and_log_error(msg)
 
         return resolved_instance
 
     def _add_mongo_class(self, class_object):
         log = self._get_specific_logger(class_object)
         try:
-            resolved_instance = class_object(mongo_db=self.mongo_db, log = log)
+            resolved_instance = class_object(mongo_db=self.mongo_db, log=log)
         except Exception as e:
-                class_name = get_class_name(class_object)
-                msg = (
-                        "Error '%s' couldn't evaluate %s(mongo_db=self.mongo_db, log = self.log.setup(component = %s)) \
+            class_name = get_class_name(class_object)
+            msg = (
+                "Error '%s' couldn't evaluate %s(mongo_db=self.mongo_db, log = self.log.setup(component = %s)) \
                         This might be because import is missing\
-                         or arguments don't follow pattern" % (str(e), class_name, class_name))
-                self._raise_and_log_error(msg)
+                         or arguments don't follow pattern"
+                % (str(e), class_name, class_name)
+            )
+            self._raise_and_log_error(msg)
 
         return resolved_instance
 
     def _add_arctic_class(self, class_object):
         log = self._get_specific_logger(class_object)
         try:
-            resolved_instance = class_object(mongo_db=self.mongo_db, log = log)
+            resolved_instance = class_object(mongo_db=self.mongo_db, log=log)
         except Exception as e:
-                class_name = get_class_name(class_object)
-                msg = (
-                        "Error %s couldn't evaluate %s(mongo_db=self.mongo_db, log = self.log.setup(component = %s)) \
+            class_name = get_class_name(class_object)
+            msg = (
+                "Error %s couldn't evaluate %s(mongo_db=self.mongo_db, log = self.log.setup(component = %s)) \
                         This might be because import is missing\
-                         or arguments don't follow pattern" % (str(e), class_name, class_name))
-                self._raise_and_log_error(msg)
+                         or arguments don't follow pattern"
+                % (str(e), class_name, class_name)
+            )
+            self._raise_and_log_error(msg)
 
         return resolved_instance
 
@@ -159,14 +172,16 @@ class dataBlob(object):
         log = self._get_specific_logger(class_object)
 
         try:
-            resolved_instance = class_object(datapath = datapath, log = log)
+            resolved_instance = class_object(datapath=datapath, log=log)
         except Exception as e:
-                class_name = get_class_name(class_object)
-                msg = (
-                        "Error %s couldn't evaluate %s(datapath = datapath, log = self.log.setup(component = %s)) \
+            class_name = get_class_name(class_object)
+            msg = (
+                "Error %s couldn't evaluate %s(datapath = datapath, log = self.log.setup(component = %s)) \
                         This might be because import is missing\
-                         or arguments don't follow pattern" % (str(e), class_name, class_name))
-                self._raise_and_log_error(msg)
+                         or arguments don't follow pattern"
+                % (str(e), class_name, class_name)
+            )
+            self._raise_and_log_error(msg)
 
         return resolved_instance
 
@@ -174,14 +189,17 @@ class dataBlob(object):
         class_name = get_class_name(class_object)
         csv_data_paths = self.csv_data_paths
         if csv_data_paths is arg_not_supplied:
-            self.log.warn("No datapaths provided for .csv, will use defaults  (may break in production, should be fine in sim)")
+            self.log.warn(
+                "No datapaths provided for .csv, will use defaults  (may break in production, should be fine in sim)"
+            )
             return arg_not_supplied
 
         datapath = csv_data_paths.get(class_name, "")
         if datapath == "":
             self.log.warn(
-                "No key for %s in csv_data_paths, will use defaults (may break in production, should be fine in sim)" %
-                class_name)
+                "No key for %s in csv_data_paths, will use defaults (may break in production, should be fine in sim)"
+                % class_name
+            )
             return arg_not_supplied
 
         return datapath
@@ -194,7 +212,7 @@ class dataBlob(object):
 
     def _get_specific_logger(self, class_object):
         class_name = get_class_name(class_object)
-        log = self.log.setup(component = class_name)
+        log = self.log.setup(component=class_name)
 
         return log
 
@@ -210,10 +228,10 @@ class dataBlob(object):
 
         return attr_name
 
-    def _add_new_class_with_new_name(self, resolved_instance, attr_name:str):
+    def _add_new_class_with_new_name(self, resolved_instance, attr_name: str):
         already_exists = self._already_existing_class_name(attr_name)
         if already_exists:
-            ## not uncommon don't log or would be a sea of span
+            ## not uncommon don't log or would be a sea of spam
             pass
         else:
             setattr(self, attr_name, resolved_instance)
@@ -225,7 +243,6 @@ class dataBlob(object):
             return False
         else:
             return True
-
 
     def _add_attr_to_list(self, new_attr: str):
         self._attr_list.append(new_attr)
@@ -243,8 +260,7 @@ class dataBlob(object):
     def close(self):
         if self._ib_conn is not arg_not_supplied:
             self.ib_conn.close_connection()
-            self.db_ib_broker_client_id.release_clientid(
-                self.ib_conn.client_id())
+            self.db_ib_broker_client_id.release_clientid(self.ib_conn.client_id())
 
         # No need to explicitly close Mongo connections; handled by Python garbage collection
 
@@ -258,11 +274,24 @@ class dataBlob(object):
         return ib_conn
 
     def _get_new_ib_connection(self) -> connectionIB:
+        # Try this 5 times...
+        attempts = 0
+        failed_ids = []
         client_id = self._get_next_client_id_for_ib()
-
-        ib_conn = connectionIB(client_id,
-                               log=self.log)
-        return ib_conn
+        while True:
+            try:
+                ib_conn = connectionIB(client_id, log=self.log)
+                for id in failed_ids:
+                    self.db_ib_broker_client_id.release_clientid(id)
+                return ib_conn
+            except Exception as e:
+                failed_ids.append(client_id)
+                client_id = self._get_next_client_id_for_ib()
+                attempts += 1
+                if attempts > 5:
+                    for id in failed_ids:
+                        self.db_ib_broker_client_id.release_clientid(id)
+                    raise e
 
     def _get_next_client_id_for_ib(self) -> int:
         ## default to tracking ID through mongo change if required
@@ -275,7 +304,7 @@ class dataBlob(object):
     def mongo_db(self) -> mongoDb:
         mongo_db = getattr(self, "_mongo_db", arg_not_supplied)
         if mongo_db is arg_not_supplied:
-            mongo_db= self._get_new_mongo_db()
+            mongo_db = self._get_new_mongo_db()
             self._mongo_db = mongo_db
 
         return mongo_db
@@ -301,7 +330,7 @@ class dataBlob(object):
     def log(self):
         log = getattr(self, "_log", arg_not_supplied)
         if log is arg_not_supplied:
-            log = logToMongod(self.log_name, mongo_db=self.mongo_db, data = self)
+            log = logToMongod(self.log_name, mongo_db=self.mongo_db, data=self)
             log.set_logging_level("on")
             self._log = log
 
@@ -309,14 +338,14 @@ class dataBlob(object):
 
     @property
     def log_name(self) -> str:
-        log_name = getattr(self, "_logname", "")
+        log_name = getattr(self, "_log_name", "")
         return log_name
 
 
 source_dict = dict(arctic="db", mongo="db", csv="db", ib="broker")
 
 
-def identifying_name(split_up_name: list, keep_original_prefix=False)-> str:
+def identifying_name(split_up_name: list, keep_original_prefix=False) -> str:
     """
     Turns sourceClassNameData into broker_class_name or db_class_name
 
@@ -332,8 +361,7 @@ def identifying_name(split_up_name: list, keep_original_prefix=False)-> str:
     try:
         assert data_label == "data"
     except BaseException:
-        raise Exception(
-            "Get_data strings only work if class name ends in ...Data")
+        raise Exception("Get_data strings only work if class name ends in ...Data")
 
     if keep_original_prefix:
         source_label = original_source_label
@@ -349,5 +377,3 @@ def identifying_name(split_up_name: list, keep_original_prefix=False)-> str:
     lower_split_up_name = [source_label] + lower_split_up_name
 
     return "_".join(lower_split_up_name)
-
-

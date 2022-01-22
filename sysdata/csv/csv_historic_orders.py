@@ -12,11 +12,13 @@ DATE_INDEX_NAME = "DATETIME"
 
 def from_list_of_orders_to_df(list_of_orders):
     list_as_dict = [order.as_dict() for order in list_of_orders]
-    keys = list(list_as_dict[-1].keys())
+    if len(list_of_orders) > 0:
+        keys = list(list_as_dict[-1].keys())
+    else:
+        keys = []
     key_data = {}
     for key_name in keys:
-        key_data[key_name] = [dict_entry[key_name]
-                              for dict_entry in list_as_dict]
+        key_data[key_name] = [dict_entry[key_name] for dict_entry in list_as_dict]
 
     index_data = [dict_entry["fill_datetime"] for dict_entry in list_as_dict]
     orders_as_df = pd.DataFrame(key_data, index=index_data)
@@ -25,8 +27,9 @@ def from_list_of_orders_to_df(list_of_orders):
 
 
 class csvStrategyHistoricOrdersData(strategyHistoricOrdersData):
-    def __init__(self, datapath=arg_not_supplied,
-                 log=logtoscreen("csvStrategyPositionData")):
+    def __init__(
+        self, datapath=arg_not_supplied, log=logtoscreen("csvStrategyPositionData")
+    ):
 
         super().__init__(log=log)
 
@@ -44,8 +47,9 @@ class csvStrategyHistoricOrdersData(strategyHistoricOrdersData):
 
 
 class csvContractHistoricOrdersData(contractHistoricOrdersData):
-    def __init__(self, datapath=arg_not_supplied,
-                 log=logtoscreen("csvContractPositionData")):
+    def __init__(
+        self, datapath=arg_not_supplied, log=logtoscreen("csvContractPositionData")
+    ):
 
         super().__init__(log=log)
 
@@ -63,8 +67,9 @@ class csvContractHistoricOrdersData(contractHistoricOrdersData):
 
 
 class csvBrokerHistoricOrdersData(contractHistoricOrdersData):
-    def __init__(self, datapath=arg_not_supplied,
-                 log=logtoscreen("csvBrokerHistoricOrdersData")):
+    def __init__(
+        self, datapath=arg_not_supplied, log=logtoscreen("csvBrokerHistoricOrdersData")
+    ):
 
         super().__init__(log=log)
 

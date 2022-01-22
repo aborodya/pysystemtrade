@@ -1,4 +1,3 @@
-
 from sysdata.mongodb.mongo_futures_instruments import mongoFuturesInstrumentData
 
 from sysdata.data_blob import dataBlob
@@ -6,6 +5,22 @@ from sysproduction.data.currency_data import dataCurrency
 from sysproduction.data.generic_production_data import productionDataLayerGeneric
 from sysdata.futures.instruments import futuresInstrumentData
 from sysobjects.spot_fx_prices import currencyValue
+from sysobjects.instruments import instrumentCosts
+
+
+class dataInstruments(productionDataLayerGeneric):
+    def _add_required_classes_to_data(self, data) -> dataBlob:
+        data.add_class_object(mongoFuturesInstrumentData)
+        return data
+
+    def update_slippage_costs(self, instrument_code: str, new_slippage: float):
+        self.db_futures_instrument_data.update_slippage_costs(
+            instrument_code, new_slippage
+        )
+
+    @property
+    def db_futures_instrument_data(self) -> futuresInstrumentData:
+        return self.data.db_futures_instrument
 
 
 class diagInstruments(productionDataLayerGeneric):
@@ -13,10 +28,14 @@ class diagInstruments(productionDataLayerGeneric):
         data.add_class_object(mongoFuturesInstrumentData)
         return data
 
-
     @property
     def db_futures_instrument_data(self) -> futuresInstrumentData:
         return self.data.db_futures_instrument
+
+    def get_cost_object(self, instrument_code: str) -> instrumentCosts:
+        meta_data = self.get_meta_data(instrument_code)
+
+        return instrumentCosts.from_meta_data(meta_data)
 
     def get_point_size(self, instrument_code: str) -> float:
         return self.get_meta_data(instrument_code).Pointsize
@@ -36,7 +55,7 @@ class diagInstruments(productionDataLayerGeneric):
 
         return value
 
-    def get_asset_class(self, instrument_code:str) -> str:
+    def get_asset_class(self, instrument_code: str) -> str:
         return self.get_meta_data(instrument_code).AssetClass
 
     def get_description(self, instrument_code: str) -> str:

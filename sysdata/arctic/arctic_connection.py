@@ -36,8 +36,10 @@ class arcticData(object):
         self.library = self._setup_lib(store, database_name, collection_name)
 
     def __repr__(self):
-        return f"Arctic connection: host {clean_mongo_host(self.host)}, " \
-               f"db {self.database_name}, collection {self.collection_name}"
+        return (
+            f"Arctic connection: host {clean_mongo_host(self.host)}, "
+            f"db {self.database_name}, collection {self.collection_name}"
+        )
 
     def read(self, ident) -> pd.DataFrame:
         item = self.library.read(ident)
@@ -48,6 +50,9 @@ class arcticData(object):
 
     def get_keynames(self) -> list:
         return self.library.list_symbols()
+
+    def has_keyname(self, keyname) -> bool:
+        return self.library.has_symbol(keyname)
 
     def delete(self, ident: str):
         self.library.delete(ident)
