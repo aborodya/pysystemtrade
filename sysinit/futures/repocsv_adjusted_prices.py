@@ -1,7 +1,7 @@
 """
 Copy from csv repo files to arctic for adjusted prices
 """
-from syscore.objects import arg_not_supplied
+from syscore.constants import arg_not_supplied
 from sysdata.arctic.arctic_adjusted_prices import arcticFuturesAdjustedPricesData
 from sysdata.csv.csv_adjusted_prices import csvFuturesAdjustedPricesData
 
@@ -13,7 +13,11 @@ if __name__ == "__main__":
     csv_adj_datapath = arg_not_supplied
     csv_adjusted_prices = csvFuturesAdjustedPricesData(csv_adj_datapath)
 
-    instrument_list = csv_adjusted_prices.get_list_of_instruments()
+    instrument_code = input("Instrument code? <return for ALL instruments> ")
+    if instrument_code == "":
+        instrument_list = csv_adjusted_prices.get_list_of_instruments()
+    else:
+        instrument_list = [instrument_code]
 
     for instrument_code in instrument_list:
         print(instrument_code)

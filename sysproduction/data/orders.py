@@ -1,5 +1,6 @@
 import datetime
-from syscore.objects import arg_not_supplied, no_parent, missing_order, missing_data
+from syscore.constants import missing_data, arg_not_supplied
+from sysexecution.orders.named_order_objects import missing_order, no_parent
 
 from sysdata.mongodb.mongo_order_stack import (
     mongoInstrumentOrderStackData,
@@ -217,7 +218,7 @@ class dataOrders(object):
         contract_order = self.get_parent_contract_order_for_historic_broker_order_id(
             order_id
         )
-        if contract_order is missing_data:
+        if contract_order is missing_order:
             return missing_order
 
         instrument_order_id = contract_order.parent

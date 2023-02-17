@@ -1,13 +1,13 @@
+from syscore.exceptions import missingContract
 from syslogdiag.log_to_screen import logtoscreen
 from sysbrokers.IB.ib_futures_contracts_data import ibFuturesContractData
-
+from sysdata.data_blob import dataBlob
 from sysbrokers.IB.client.ib_positions_client import ibPositionsClient
 from sysbrokers.IB.ib_instruments_data import ibFuturesInstrumentData
 from sysbrokers.IB.ib_connection import connectionIB
 from sysbrokers.broker_contract_position_data import brokerContractPositionData
 
-from syscore.objects import arg_not_supplied, missing_contract
-
+from syscore.constants import arg_not_supplied
 
 from sysobjects.production.positions import contractPosition, listOfContractPositions
 from sysobjects.contracts import futuresContract
@@ -15,10 +15,13 @@ from sysobjects.contracts import futuresContract
 
 class ibContractPositionData(brokerContractPositionData):
     def __init__(
-        self, ibconnection: connectionIB, log=logtoscreen("ibContractPositionData")
+        self,
+        ibconnection: connectionIB,
+        data: dataBlob,
+        log=logtoscreen("ibContractPositionData"),
     ):
+        super().__init__(log=log, data=data)
         self._ibconnection = ibconnection
-        super().__init__(log=log)
 
     @property
     def ibconnection(self) -> connectionIB:
@@ -39,11 +42,11 @@ class ibContractPositionData(brokerContractPositionData):
 
     @property
     def futures_contract_data(self) -> ibFuturesContractData:
-        return ibFuturesContractData(self.ibconnection, log=self.log)
+        return self.data.broker_futures_contract
 
     @property
     def futures_instrument_data(self) -> ibFuturesInstrumentData:
-        return ibFuturesInstrumentData(self.ibconnection, log=self.log)
+        return self.data.broker_futures_instrument
 
     def get_all_current_positions_as_list_with_contract_objects(
         self, account_id=arg_not_supplied
@@ -54,10 +57,11 @@ class ibContractPositionData(brokerContractPositionData):
         )
         current_positions = []
         for position_entry in all_positions:
-            contract_position_object = self._get_contract_position_for_raw_entry(
-                position_entry
-            )
-            if contract_position_object is missing_contract:
+            try:
+                contract_position_object = self._get_contract_position_for_raw_entry(
+                    position_entry
+                )
+            except missingContract:
                 continue
             else:
                 current_positions.append(contract_position_object)
@@ -73,12 +77,13 @@ class ibContractPositionData(brokerContractPositionData):
     def _get_contract_position_for_raw_entry(self, position_entry) -> contractPosition:
         position = position_entry["position"]
         if position == 0:
-            return missing_contract
+            raise missingContract
 
         ib_code = position_entry["symbol"]
         instrument_code = (
             self.futures_instrument_data.get_instrument_code_from_broker_code(ib_code)
         )
+
         expiry = position_entry["expiry"]
 
         contract = futuresContract(instrument_code, expiry)

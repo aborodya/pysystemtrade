@@ -1,12 +1,18 @@
+import datetime
 from collections import namedtuple
 
 import pandas as pd
 
-from syscore.objects import missing_order
+from syscore.constants import named_object
+from sysexecution.orders.named_order_objects import missing_order
+from sysobjects.orders import SimpleOrder, ListOfSimpleOrders
+
 from sysexecution.orders.list_of_orders import listOfOrders
 from sysexecution.orders.base_orders import Order
 
 Fill = namedtuple("Fill", ["date", "qty", "price"])
+
+NOT_FILLED = named_object("not filled")
 
 
 class listOfFills(list):
@@ -30,15 +36,13 @@ class listOfFills(list):
         return df
 
     @classmethod
-    def from_position_series_and_prices(
-        listOfFills, positions: pd.Series, price: pd.Series
-    ):
+    def from_position_series_and_prices(cls, positions: pd.Series, price: pd.Series):
 
         list_of_fills = _list_of_fills_from_position_series_and_prices(
             positions=positions, price=price
         )
 
-        return list_of_fills
+        return cls(list_of_fills)
 
 
 def _list_of_fills_from_position_series_and_prices(
@@ -97,3 +101,59 @@ def fill_from_order(order: Order) -> Fill:
         return missing_order
 
     return Fill(fill_datetime, fill_qty, fill_price)
+
+
+def fill_from_simple_order(
+    simple_order: SimpleOrder,
+    market_price: float,
+    fill_datetime: datetime.datetime,
+    slippage: float = 0,
+) -> Fill:
+    if simple_order.is_zero_order:
+        return NOT_FILLED
+
+    elif simple_order.is_market_order:
+        fill = fill_from_simple_market_order(
+            simple_order,
+            market_price=market_price,
+            slippage=slippage,
+            fill_datetime=fill_datetime,
+        )
+    else:
+        ## limit order
+        fill = fill_from_simple_limit_order(
+            simple_order, market_price=market_price, fill_datetime=fill_datetime
+        )
+
+    return fill
+
+
+def fill_from_simple_limit_order(
+    simple_order: SimpleOrder, market_price: float, fill_datetime: datetime.datetime
+) -> Fill:
+
+    limit_price = simple_order.limit_price
+    if simple_order.quantity > 0:
+        if limit_price > market_price:
+            return Fill(fill_datetime, simple_order.quantity, limit_price)
+
+    if simple_order.quantity < 0:
+        if limit_price < market_price:
+            return Fill(fill_datetime, simple_order.quantity, limit_price)
+
+    return NOT_FILLED
+
+
+def fill_from_simple_market_order(
+    simple_order: SimpleOrder,
+    market_price: float,
+    fill_datetime: datetime.datetime,
+    slippage: float = 0,
+) -> Fill:
+
+    if simple_order.quantity > 0:
+        fill_price_with_slippage = market_price + slippage
+    else:
+        fill_price_with_slippage = market_price - slippage
+
+    return Fill(fill_datetime, simple_order.quantity, fill_price_with_slippage)

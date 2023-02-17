@@ -9,7 +9,7 @@ this:
 
 """
 
-from syscore.objects import success, arg_not_supplied, missing_data
+from syscore.constants import missing_data, arg_not_supplied
 
 from sysdata.config.configdata import Config
 from sysdata.data_blob import dataBlob
@@ -46,6 +46,7 @@ class runSystemClassic(object):
         self.strategy_name = strategy_name
         self.backtest_config_filename = backtest_config_filename
 
+    ## DO NOT CHANGE THE NAME OF THIS FUNCTION
     def run_backtest(self):
         strategy_name = self.strategy_name
         data = self.data
@@ -57,16 +58,27 @@ class runSystemClassic(object):
             base_currency=base_currency,
         )
 
-        updated_buffered_positions(data, strategy_name, system)
+        function_to_call_on_update = self.function_to_call_on_update
+        function_to_call_on_update(
+            data=data, strategy_name=strategy_name, system=system
+        )
 
         store_backtest_state(data, system, strategy_name=strategy_name)
+
+    ## MODIFY THIS WHEN INHERITING FOR A DIFFERENT STRATEGY
+    ## ARGUMENTS MUST BE: data: dataBlob, strategy_name: str, system: System
+    @property
+    def function_to_call_on_update(self):
+        return updated_buffered_positions
 
     def _get_currency_and_capital(self):
         data = self.data
         strategy_name = self.strategy_name
 
         capital_data = dataCapital(data)
-        notional_trading_capital = capital_data.get_capital_for_strategy(strategy_name)
+        notional_trading_capital = capital_data.get_current_capital_for_strategy(
+            strategy_name
+        )
         if notional_trading_capital is missing_data:
             # critical log will send email
             error_msg = (
@@ -78,12 +90,18 @@ class runSystemClassic(object):
         currency_data = dataCurrency(data)
         base_currency = currency_data.get_base_currency()
 
+        self.data.log.msg(
+            "Using capital of %s %.2f" % (base_currency, notional_trading_capital)
+        )
+
         return base_currency, notional_trading_capital
 
     # DO NOT CHANGE THE NAME OF THIS FUNCTION; IT IS HARDCODED INTO CONFIGURATION FILES
     # BECAUSE IT IS ALSO USED TO LOAD BACKTESTS
     def system_method(
-        self, notional_trading_capital: float = arg_not_supplied, base_currency: str = arg_not_supplied
+        self,
+        notional_trading_capital: float = arg_not_supplied,
+        base_currency: str = arg_not_supplied,
     ) -> System:
         data = self.data
         backtest_config_filename = self.backtest_config_filename
@@ -110,7 +128,7 @@ def production_classic_futures_system(
     log_level = "on"
 
     sim_data = get_sim_data_object_for_production(data)
-    config = set_up_config(data, config_filename)
+    config = Config(config_filename)
 
     # Overwrite capital and base currency
     if notional_trading_capital is not arg_not_supplied:
@@ -125,19 +143,6 @@ def production_classic_futures_system(
     system.set_logging_level(log_level)
 
     return system
-
-
-def set_up_config(data: dataBlob, config_filename: str) -> Config:
-    production_config = data.config
-    backtest_file_config = Config(config_filename)
-
-    # 'later elements overwrite earlier ones'
-    config = Config([production_config, backtest_file_config])
-
-    ## this is also done by the system, but more transparent to do it here
-    config.fill_with_defaults()
-
-    return config
 
 
 def updated_buffered_positions(data: dataBlob, strategy_name: str, system: System):

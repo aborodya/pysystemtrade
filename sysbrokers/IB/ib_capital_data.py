@@ -1,8 +1,8 @@
 from sysbrokers.IB.ib_connection import connectionIB
 from sysbrokers.IB.client.ib_accounting_client import ibAccountingClient
 from sysbrokers.broker_capital_data import brokerCapitalData
-
-from syscore.objects import arg_not_supplied
+from sysdata.data_blob import dataBlob
+from syscore.constants import arg_not_supplied
 
 from sysobjects.spot_fx_prices import listOfCurrencyValues
 
@@ -12,9 +12,12 @@ from syslogdiag.log_to_screen import logtoscreen
 
 class ibCapitalData(brokerCapitalData):
     def __init__(
-        self, ibconnection: connectionIB, log: logger = logtoscreen("ibCapitalData")
+        self,
+        ibconnection: connectionIB,
+        data: dataBlob,
+        log: logger = logtoscreen("ibCapitalData"),
     ):
-        super().__init__(log=log)
+        super().__init__(log=log, data=data)
         self._ibconnection = ibconnection
 
     @property
@@ -41,9 +44,9 @@ class ibCapitalData(brokerCapitalData):
             account_id=account_id
         )
 
-    def get_excess_liquidity_value_across_currency(self,
-                                                   account_id: str = arg_not_supplied
-                                                   )-> listOfCurrencyValues:
+    def get_excess_liquidity_value_across_currency(
+        self, account_id: str = arg_not_supplied
+    ) -> listOfCurrencyValues:
         return self.ib_client.broker_get_excess_liquidity_value_across_currency(
             account_id=account_id
         )

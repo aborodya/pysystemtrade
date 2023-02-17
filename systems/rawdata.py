@@ -5,7 +5,7 @@ import pandas as pd
 from systems.stage import SystemStage
 from syscore.objects import resolve_function
 from syscore.dateutils import ROOT_BDAYS_INYEAR
-from syscore.pdutils import prices_to_daily_prices
+from syscore.exceptions import missingData
 from systems.system_cache import input, diagnostic, output
 
 from sysdata.sim.futures_sim_data import futuresSimData
@@ -85,9 +85,7 @@ class RawData(SystemStage):
 
     @input
     def get_hourly_prices(self, instrument_code: str) -> pd.Series:
-        raw_prices = self.get_natural_frequency_prices(instrument_code)
-
-        hourly_prices = raw_prices.resample("1H").last()
+        hourly_prices = self.data_stage.hourly_prices(instrument_code)
 
         return hourly_prices
 
@@ -232,7 +230,7 @@ class RawData(SystemStage):
         denom_price = self.daily_denominator_price(instrument_code)
         return_vol = self.daily_returns_volatility(instrument_code)
         (denom_price, return_vol) = denom_price.align(return_vol, join="right")
-        perc_vol = 100.0 * (return_vol / denom_price.ffill())
+        perc_vol = 100.0 * (return_vol / denom_price.ffill().abs())
 
         return perc_vol
 
@@ -324,12 +322,14 @@ class RawData(SystemStage):
         self, list_of_instruments: list
     ) -> pd.Series:
 
-        norm_returns = \
-            self._aggregate_daily_vol_normalised_returns_for_list_of_instruments(list_of_instruments)
+        norm_returns = (
+            self._aggregate_daily_vol_normalised_returns_for_list_of_instruments(
+                list_of_instruments
+            )
+        )
         norm_price = norm_returns.cumsum()
 
         return norm_price
-
 
     @diagnostic()
     def _by_asset_class_daily_vol_normalised_price_for_asset_class(
@@ -346,7 +346,9 @@ class RawData(SystemStage):
             asset_class
         )
 
-        norm_price = self._daily_vol_normalised_price_for_list_of_instruments(instruments_in_asset_class)
+        norm_price = self._daily_vol_normalised_price_for_list_of_instruments(
+            instruments_in_asset_class
+        )
 
         return norm_price
 
@@ -368,11 +370,13 @@ class RawData(SystemStage):
 
         # Align for an easy life
         # As usual forward fill at last moment
-        normalised_price_for_asset_class = normalised_price_for_asset_class.reindex(
-            normalised_price_this_instrument.index
-        ).ffill()
+        normalised_price_for_asset_class_aligned = (
+            normalised_price_for_asset_class.reindex(
+                normalised_price_this_instrument.index
+            ).ffill()
+        )
 
-        return normalised_price_for_asset_class
+        return normalised_price_for_asset_class_aligned
 
     def rolls_per_year(self, instrument_code: str) -> int:
         return self.parent.data.get_rolls_per_year(instrument_code)
@@ -402,7 +406,7 @@ class RawData(SystemStage):
 
         instrcarrydata = self.parent.data.get_instrument_raw_carry_data(instrument_code)
         if len(instrcarrydata) == 0:
-            raise Exception(
+            raise missingData(
                 "Data for %s not found! Remove from instrument list, or add to config.ignore_instruments"
                 % instrument_code
             )
@@ -636,7 +640,15 @@ class RawData(SystemStage):
         2015-12-11    97.9875
         Freq: B, Name: PRICE, dtype: float64
         """
-        prices = self.get_instrument_raw_carry_data(instrument_code).PRICE
+        try:
+            prices = self.get_instrument_raw_carry_data(instrument_code).PRICE
+        except missingData:
+            self.log.warn(
+                "No carry data found for %s, using adjusted prices to calculate percentage returns"
+                % instrument_code
+            )
+            return self.get_daily_prices(instrument_code)
+
         daily_prices = prices.resample("1B").last()
 
         return daily_prices

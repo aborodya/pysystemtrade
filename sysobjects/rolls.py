@@ -2,7 +2,7 @@ from syscore.genutils import np_convert
 import datetime
 from copy import copy
 
-from syscore.dateutils import month_from_contract_letter, MONTH_LIST
+from syscore.dateutils import month_from_contract_letter, FUTURES_MONTH_LIST
 from sysobjects.contract_dates_and_expiries import contractDate, contract_given_tuple
 
 forward = 1
@@ -27,6 +27,9 @@ class rollCycle(object):
 
     def __len__(self) -> int:
         return len(self.cyclestring)
+
+    def __eq__(self, other):
+        return self.cyclestring == other.cyclestring
 
     @property
     def cyclestring(self):
@@ -176,7 +179,7 @@ class rollCycle(object):
             return False
 
 
-GLOBAL_ROLLCYCLE = rollCycle("".join(MONTH_LIST))
+GLOBAL_ROLLCYCLE = rollCycle("".join(FUTURES_MONTH_LIST))
 
 
 class rollParameters(object):
@@ -210,9 +213,9 @@ class rollParameters(object):
         self._priced_rollcycle = rollCycle(priced_rollcycle)
         self._global_rollcycle = GLOBAL_ROLLCYCLE
 
-        self._roll_offset_day = roll_offset_day
-        self._carry_offset = carry_offset
-        self._approx_expiry_offset = approx_expiry_offset
+        self._roll_offset_day = int(roll_offset_day)
+        self._carry_offset = int(carry_offset)
+        self._approx_expiry_offset = int(approx_expiry_offset)
 
     @property
     def roll_offset_day(self):
@@ -225,6 +228,16 @@ class rollParameters(object):
     @property
     def approx_expiry_offset(self):
         return self._approx_expiry_offset
+
+    def __eq__(self, other):
+        return (
+            (self.hold_rollcycle == other.hold_rollcycle)
+            & (self.priced_rollcycle == self.priced_rollcycle)
+            & (self.global_rollcycle == other.global_rollcycle)
+            & (self.roll_offset_day == other.roll_offset_day)
+            & (self.carry_offset == other.carry_offset)
+            & (self.approx_expiry_offset == other.approx_expiry_offset)
+        )
 
     def __repr__(self):
         dict_rep = self.as_dict()

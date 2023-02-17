@@ -1,20 +1,25 @@
+from copy import copy
 import datetime
 
 import numpy as np
 import pandas as pd
 
-from syscore.dateutils import n_days_ago
+from syscore.exceptions import missingContract
+from syscore.interactive.progress_bar import progressBar
+
 from sysdata.data_blob import dataBlob
-from sysproduction.data.currency_data import dataCurrency
-from sysproduction.data.instruments import diagInstruments
-from sysproduction.data.prices import diagPrices
+
+from sysobjects.contracts import futuresContract
+
+from sysproduction.data.broker import dataBroker
+from sysproduction.data.contracts import dataContracts
+from sysproduction.data.instruments import diagInstruments, get_block_size
+from sysproduction.data.prices import diagPrices, recent_average_price
 from sysproduction.reporting.data.trades import (
     get_recent_broker_orders,
     create_raw_slippage_df,
 )
-from sysproduction.reporting.data.risk_metrics import (
-    get_current_annualised_perc_stdev_for_instrument,
-)
+from sysproduction.data.risk import get_current_annualised_perc_stdev_for_instrument
 
 
 def get_current_configured_spread_cost(data):
@@ -38,20 +43,47 @@ def get_configured_spread_cost_for_instrument(data, instrument_code):
     return meta_data.Slippage
 
 
-def get_SR_cost_for_instrument(data: dataBlob, instrument_code: str):
-    print("Costs for %s" % instrument_code)
-    percentage_cost = get_percentage_cost_for_instrument(data, instrument_code)
+def get_SR_cost_calculation_for_instrument(
+    data: dataBlob,
+    instrument_code: str,
+    include_commission: bool = True,
+    include_spread: bool = True,
+):
+
+    percentage_cost = get_percentage_cost_for_instrument(
+        data,
+        instrument_code,
+        include_spread=include_spread,
+        include_commission=include_commission,
+    )
     avg_annual_vol_perc = get_percentage_ann_stdev(data, instrument_code)
 
     # cost per round trip
     SR_cost = 2.0 * percentage_cost / avg_annual_vol_perc
 
-    return SR_cost
+    return dict(
+        percentage_cost=percentage_cost,
+        avg_annual_vol_perc=avg_annual_vol_perc,
+        SR_cost=SR_cost,
+    )
 
 
-def get_percentage_cost_for_instrument(data: dataBlob, instrument_code: str):
+def get_percentage_cost_for_instrument(
+    data: dataBlob,
+    instrument_code: str,
+    include_spread: bool = True,
+    include_commission: bool = True,
+):
     diag_instruments = diagInstruments(data)
     costs_object = diag_instruments.get_cost_object(instrument_code)
+    if not include_spread and not include_commission:
+        return 0
+    if not include_spread:
+        costs_object = costs_object.commission_only()
+
+    if not include_commission:
+        costs_object = costs_object.spread_only()
+
     blocks_traded = 1
     block_price_multiplier = get_block_size(data, instrument_code)
     price = recent_average_price(data, instrument_code)
@@ -64,48 +96,6 @@ def get_percentage_cost_for_instrument(data: dataBlob, instrument_code: str):
     return percentage_cost
 
 
-def get_cash_cost_in_base_for_instrument(data: dataBlob, instrument_code: str):
-    diag_instruments = diagInstruments(data)
-    costs_object = diag_instruments.get_cost_object(instrument_code)
-    blocks_traded = 1
-    block_price_multiplier = get_block_size(data, instrument_code)
-    price = recent_average_price(data, instrument_code)
-    cost_instrument_ccy = costs_object.calculate_cost_instrument_currency(
-        blocks_traded=blocks_traded,
-        block_price_multiplier=block_price_multiplier,
-        price=price,
-    )
-    fx = last_currency_fx(data, instrument_code)
-    cost_base_ccy = cost_instrument_ccy * fx
-
-    return cost_base_ccy
-
-
-def last_currency_fx(data: dataBlob, instrument_code: str) -> float:
-    data_currency = dataCurrency(data)
-    diag_instruments = diagInstruments(data)
-    currency = diag_instruments.get_currency(instrument_code)
-    fx_rate = data_currency.get_last_fx_rate_to_base(currency)
-
-    return fx_rate
-
-
-def recent_average_price(data: dataBlob, instrument_code: str) -> float:
-    diag_prices = diagPrices(data)
-    prices = diag_prices.get_adjusted_prices(instrument_code)
-    if len(prices) == 0:
-        return np.nan
-    one_year_ago = n_days_ago(365)
-    recent_prices = prices[one_year_ago:]
-
-    return recent_prices.mean(skipna=True)
-
-
-def get_block_size(data, instrument_code):
-    diag_instruments = diagInstruments(data)
-    return diag_instruments.get_point_size(instrument_code)
-
-
 def get_percentage_ann_stdev(data, instrument_code):
     try:
         perc = get_current_annualised_perc_stdev_for_instrument(data, instrument_code)
@@ -114,6 +104,63 @@ def get_percentage_ann_stdev(data, instrument_code):
         return np.nan
 
     return perc
+
+
+def adjust_df_costs_show_ticks(
+    data: dataBlob, combined_df_costs: pd.DataFrame
+) -> pd.DataFrame:
+
+    tick_adjusted_df_costs = copy(combined_df_costs)
+    list_of_instrument_codes = list(tick_adjusted_df_costs.index)
+    series_of_tick_values = get_series_of_tick_values(data, list_of_instrument_codes)
+
+    to_divide = [
+        "bid_ask_trades",
+        "total_trades",
+        "bid_ask_sampled",
+        "estimate",
+        "Configured",
+    ]
+    for col_name in to_divide:
+        tick_adjusted_df_costs[col_name] = (
+            tick_adjusted_df_costs[col_name] / series_of_tick_values
+        )
+
+    return tick_adjusted_df_costs
+
+
+def get_series_of_tick_values(data: dataBlob, list_of_instrument_codes: list) -> dict:
+
+    list_of_tick_values = [
+        get_tick_value_for_instrument_code(instrument_code=instrument_code, data=data)
+        for instrument_code in list_of_instrument_codes
+    ]
+
+    series_of_ticks = pd.Series(list_of_tick_values, index=list_of_instrument_codes)
+
+    return series_of_ticks
+
+
+def get_tick_value_for_instrument_code(instrument_code: str, data: dataBlob) -> float:
+    broker_data = dataBroker(data)
+    contract_data = dataContracts()
+    try:
+        contract_id = contract_data.get_priced_contract_id(instrument_code)
+    except AttributeError:
+        return np.nan
+
+    futures_contract = futuresContract(instrument_code, contract_id)
+
+    try:
+        tick_value = (
+            broker_data.broker_futures_contract_data.get_min_tick_size_for_contract(
+                futures_contract
+            )
+        )
+    except missingContract:
+        return np.nan
+
+    return tick_value
 
 
 def get_combined_df_of_costs(
@@ -141,9 +188,9 @@ def get_combined_df_of_costs(
         configured_costs=configured_costs,
     )
 
-    perc_difference = (
-        estimate_with_data.estimate - configured_costs
-    ) / configured_costs
+    perc_difference = 100.0 * (
+        (estimate_with_data.estimate - configured_costs) / configured_costs
+    )
 
     all_together = pd.concat(
         [combined, estimate_with_data, configured_costs, perc_difference], axis=1
@@ -151,10 +198,10 @@ def get_combined_df_of_costs(
     all_together.columns = (
         list(combined.columns)
         + list(estimate_with_data.columns)
-        + ["Configured", "% Difference"]
+        + ["Configured", "Difference"]
     )
 
-    all_together = all_together.sort_values("% Difference", ascending=False)
+    all_together = all_together.sort_values("Difference", ascending=False)
 
     return all_together
 
@@ -201,6 +248,7 @@ def best_estimate_from_cost_data(
     )
     weight_on_config[weight_on_config.isna()] = 0.0
     weight_on_config[all_weights.configured.isna()] = 0.0
+    weight_on_config[all_weights.configured == 0] = 0.0
 
     weight_all = weight_on_samples + weight_on_trades + weight_on_config
     weight_all[weight_all == 0.0] = np.nan
@@ -224,6 +272,7 @@ def best_estimate_from_cost_data(
         "weight_config",
         "estimate",
     ]
+    estimate_with_data.dropna(how="all")
 
     return estimate_with_data
 
@@ -292,17 +341,27 @@ def get_average_half_spread_by_instrument_from_raw_slippage(
     return average_half_spread_by_code
 
 
-def get_table_of_SR_costs(data):
+def get_table_of_SR_costs(
+    data, include_commission: bool = True, include_spread: bool = True
+):
     diag_prices = diagPrices(data)
     list_of_instruments = diag_prices.get_list_of_instruments_in_multiple_prices()
-    SR_costs = dict(
-        [
-            (instrument_code, get_SR_cost_for_instrument(data, instrument_code))
-            for instrument_code in list_of_instruments
-        ]
-    )
-    SR_costs = pd.Series(SR_costs)
-    SR_costs = SR_costs.to_frame("SR_cost")
+
+    print("Getting SR costs")
+    p = progressBar(len(list_of_instruments))
+    SR_costs = {}
+    for instrument_code in list_of_instruments:
+        SR_costs[instrument_code] = get_SR_cost_calculation_for_instrument(
+            data,
+            instrument_code,
+            include_spread=include_spread,
+            include_commission=include_commission,
+        )
+        p.iterate()
+
+    p.close()
+    SR_costs = pd.DataFrame(SR_costs)
+    SR_costs = SR_costs.transpose()
     SR_costs = SR_costs.sort_values("SR_cost", ascending=False)
 
     return SR_costs

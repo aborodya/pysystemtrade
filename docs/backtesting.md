@@ -1,4 +1,4 @@
-This is the userguide for using pysystemtrade as a backtesting platform. Before reading this you should have gone through the [introduction.](/docs/introduction.md)
+This is the user guide for using pysystemtrade as a backtesting platform. Before reading this you should have gone through the [introduction.](/docs/introduction.md)
 
 Related documents:
 
@@ -118,7 +118,7 @@ Table of Contents
          * [Using estimated weights and instrument diversification multiplier(/systems/portfolio.py)](#using-estimated-weights-and-instrument-diversification-multipliersystemsportfoliopy)
             * [Estimating the instrument weights](#estimating-the-instrument-weights)
             * [Estimating the forecast diversification multiplier](#estimating-the-forecast-diversification-multiplier-1)
-         * [Buffering and position intertia](#buffering-and-position-intertia)
+         * [Buffering and position inertia](#buffering-and-position-inertia)
          * [Capital correction](#capital-correction)
       * [Stage: Accounting](#stage-accounting)
          * [Using the standard <a href="/systems/accounts/accounts_stage.py">Account class</a>](#using-the-standard-account-class)
@@ -187,7 +187,7 @@ Table of Contents
          * [Instrument diversification multiplier (estimated)](#instrument-diversification-multiplier-estimated)
          * [Buffering](#buffering)
       * [Accounting stage](#accounting-stage-1)
-         * [Buffering and position intertia](#buffering-and-position-intertia-1)
+         * [Buffering and position inertia](#buffering-and-position-inertia-1)
          * [Costs](#costs-1)
          * [Capital correction](#capital-correction-1)
 
@@ -295,7 +295,8 @@ section](#standard_accounts_stage).
 The backtest looks for its configuration information in the following places:
 
 1. Elements in the configuration object
-2. If not found, in: Project defaults
+2. If not found, in: the private yaml config if it exists here `/private/private_config.yaml`
+3. If not found, in: Project defaults
 
 Configuration objects can be loaded from [yaml](https://pyyaml.org/) files, or
 created with a dictionary. This suggests that you can modify the systems
@@ -305,7 +306,8 @@ behaviour in any of the following ways:
    system
 2. Change a configuration object in memory, and create a new system with it.
 3. Change a configuration object within an existing system (advanced)
-4. Change the project defaults (definitely not recommended)
+4. Create a private config yaml `/private/private_config.yaml` (this useful if you want to make a global change that affects all your backtest)
+5. Change the project defaults (definitely not recommended)
 
 For a list of all possible configuration options, see [this
 table](#Configuration_options).
@@ -398,7 +400,12 @@ Because we don't create a new system and have to recalculate everything from
 scratch, this can be useful for testing isolated changes to the system **if**
 you know what you're doing.
 
-### Option 4: Change the project defaults (definitely not recommended)
+### Option 4: Create a `/private/private_config.yaml` file
+
+This makes sense if you want to make a global change to a particular parameter rather than constantly including certain things in your configuration files. Anything in this file will overwrite the system defaults, but will in turn be overwritten by the backtest configuration .yaml file. This file will also come in very handy when it comes to [using pysystemtrade as a production trading environment](/docs/production.md)
+
+
+### Option 5: Change the project defaults (definitely not recommended)
 
 I don't recommend changing the defaults - a lot of tests will fail for a
 start - but should you want to more information is given [here](#defaults).
@@ -537,7 +544,7 @@ You need to set the start_date in the .yaml backtest configuration file:
 
 ```
 ## Note you must use this format
-start_date: 2000-01-19
+start_date: '2000-01-19'
 ```
 
 
@@ -772,6 +779,7 @@ The full list of keys that you can use in the `csv_data_paths` are:
 * `csvFuturesMultiplePricesData` (prices for current, next and carry contracts)
 * `csvFuturesAdjustedPricesData` (stitched back-adjusted prices)
 * `csvFxPricesData` (for FX prices)
+* `csvRollParametersData` (for roll configuration)
   
 Note that you can't put adjusted prices and carry data in the same directory since they use the same file format.
 
@@ -966,7 +974,7 @@ the instrument_code):
    FXRATE
 
 DATETIME should be something that `pandas.to_datetime` can parse. Note that the
-price in (2) is the continously stitched price (see [volatility
+price in (2) is the continuously stitched price (see [volatility
 calculation](#vol_calc) ), whereas the price column in (3) is the price of the
 contract we're currently trading.
 
@@ -1066,6 +1074,7 @@ Methods that you'll probably want to override:
 - `get_instrument_currency`: Returns str
 - `_get_fx_data(currency1, currency2)` Returns Tx1 pandas data frame of
   exchange rates
+- 'get_rolls_per_year': returns int
 
 You should not override `get_fx_for_instrument`, or any of the other private fx
 related methods. Once you've created a `_get_fx_data method`, then the methods
@@ -1203,7 +1212,7 @@ These will create .yaml files which can then be pasted into your existing config
 
 <a name="defaults"> </a>
 
-### Project defaults
+### Project defaults and private configuration
 
 Many (but not all) configuration parameters have defaults which are used by the
 system if the parameters are not in the object. These can be found in the
@@ -1211,10 +1220,13 @@ system if the parameters are not in the object. These can be found in the
 [configuration options](#Configuration_options) explains what the defaults are,
 and where they are used.
 
-WARNING: The way that configuration and defaults are applied in a [production environment](/docs/production.md) is a bit complex, so be careful out there.
-
 I recommend that you do not change these defaults. It's better to use the
-settings you want in each system configuration file.
+settings you want in each system configuration file, or use a private configuration file if this is something you want to apply to all your backtests.
+
+If this file exists, `/private/private_config.yaml`, it will be used as a private configuration file.
+
+Basically, whenever a configuration object is added to a system, if there is a private config file then we add the elements from that. Then for any remaining missing elements we add the elements from the defaults.yaml.
+
 
 <a name="config_function_defaults"> </a>
 
@@ -1231,11 +1243,11 @@ new ones with different names, to avoid accidentally breaking the system.
 
 <a name="defaults_how"> </a>
 
-#### How the defaults work
+#### How the defaults and private configuration work
 
 
 When added to a system the config class fills in parameters that are missing
-from the original config object, but are present in the default .yaml file. For
+from the original config object, but are present in (i) the private .yaml file and (ii) the default .yaml file. For
 example if forecast_scalar is missing from the config, then the default value
 of 1.0 will be used. This works in a similar way for top level config items
 that are lists, str, int and float.
@@ -1370,7 +1382,7 @@ Once we're happy with our configuration we can use it in a system:
 from systems.provided.futures_chapter15.basesystem import futures_system
 system=futures_system(config=my_config)
 ```
-Note it's only when a config is included in a system that the defaults are populated.
+Note it's only when a config is included in a system that the private configuration and defaults are populated.
 
 
 ### Including your own configuration options
@@ -1424,17 +1436,17 @@ You can also save a config object into a yaml file:
 ```python
 from systems.provided.futures_chapter15.basesystem import futures_system
 import yaml
-from syscore.fileutils import get_filename_for_package
+from syscore.fileutils import resolve_path_and_filename_for_package
 
-system=futures_system()
-my_config=system.config
+system = futures_system()
+my_config = system.config
 
 ## make some changes to my_config here
 
-filename=get_filename_for_package("private.this_system_name.config.yaml")
+filename = resolve_path_and_filename_for_package("private.this_system_name.config.yaml")
 
 with open(filename, 'w') as outfile:
-    outfile.write( yaml.dump(my_config, default_flow_style=True) )
+   outfile.write(yaml.dump(my_config, default_flow_style=True))
 ```
 
 This is useful if you've been playing with a backtest configuration, and want
@@ -1941,7 +1953,7 @@ to calculate it if required (see below). To make this easier when a stage
 object joins a system it gains an attribute self.parent, which will be the
 'parent' system.
 
-Think carefully about wether your method should create data that is protected
+Think carefully about whether your method should create data that is protected
 from casual cache deletion. As a rule anything that cuts across instruments and
 / or changes slowly should be protected. Here are the current list of protected
 items:
@@ -1961,7 +1973,7 @@ Also think about whether you're going to cache any complex objects that
 `pickle` might have trouble with, like class instances. You need to flag these
 up as problematic.
 
-Caching is implemeted (as of version 0.14.0 of this project) by python
+Caching is implemented (as of version 0.14.0 of this project) by python
 decorators attached to methods in the stage objects. There are four decorators
 used by the code:
 
@@ -2161,7 +2173,7 @@ on. See [logging](#logging) for more details.
 ### Stage 'wiring'
 
 It's worth having a basic understanding of how the stages within a system are
-'wired' together. Futhermore if you're going to modify or create new code, or
+'wired' together. Furthermore if you're going to modify or create new code, or
 use [advanced system caching](#caching), you're going to need to understand
 this properly.
 
@@ -2359,7 +2371,7 @@ following configurable attributes:
 - 35 day span
 - Needs 10 periods to generate a value
 - Will floor any values less than 0.0000000001
-- Applys a further vol floor which:
+- Applies a further vol floor which:
   - Calculates the 5% percentile of vol using a 500 day moving average (needing
     100 periods to generate a value)
   - Floors any vol below that level
@@ -2715,7 +2727,7 @@ from systems.trading_rules import TradingRule, create_variations_oneparameter, c
 ## Let's create 3 variations of ewmac
 ## The default ewmac has Lslow=128
 ## Let's keep that fixed and vary Lfast
-rule = TradingRule("systems.provided.example.rules.ewmac_forecast_with_defaults")
+rule = TradingRule("systems.provided.rules.ewmac.ewmac_forecast_with_defaults")
 variations = create_variations_oneparameter(rule, [4, 10, 100], "ewmac_Lfast")
 
 variations.keys()
@@ -2728,7 +2740,7 @@ dict_keys(['ewmac_Lfast_4', 'ewmac_Lfast_10', 'ewmac_Lfast_100'])
 
 ```python
 ## Now let's vary both Lslow and Lfast
-rule=TradingRule("systems.provided.example.rules.ewmac_forecast_with_defaults")
+rule=TradingRule("systems.provided.rules.ewmac.ewmac_forecast_with_defaults")
 
 ## each separate rule is specified by a dict. We could use a lambda to produce these automatically
 variations=create_variations(rule, [dict(Lfast=2, Lslow=8), dict(Lfast=4, Lslow=16)], key_argname="Lfast")
@@ -2846,7 +2858,7 @@ system.rules._trading_rules.pop("ewmac2_8")
 
 This is a simple stage that performs two steps:
 
-1. Scale forecasts so they have the right average absolute value, by multipling
+1. Scale forecasts so they have the right average absolute value, by multiplying
    raw forecasts by a forecast scalar
 2. Cap forecasts at a maximum value
 
@@ -3173,7 +3185,7 @@ See [estimating diversification multipliers](#divmult).
 
 <a name="buffer"> </a>
 
-#### Buffering and position intertia
+#### Buffering and position inertia
 
 Position inertia, or buffering, is a way of reducing trading costs. The idea is
 that we avoid trading if our optimal position changes only slightly by applying
@@ -3185,7 +3197,7 @@ position inertia method used in my book. We compare the current position to the
 optimal position. If it's not within 10% (the 'buffer') then we trade to the
 optimal position, otherwise we don't bother.
 
-This configuration will implement position intertia as in my book.
+This configuration will implement position inertia as in my book.
 
 YAML:
 ```
@@ -3252,7 +3264,7 @@ The standard accounting class includes several useful methods:
   (returns accountCurve)
 - `pandl_across_subsystems`: group together all subsystem p&l (not the same as
   portfolio! Instrument weights aren't used) (returns accountCurveGroup)
-- `pandl_for_trading_rule`: how a trading rule has done agggregated over all
+- `pandl_for_trading_rule`: how a trading rule has done aggregated over all
   instruments (returns accountCurveGroup)
 - `pandl_for_trading_rule_weighted`: how a trading rule has done over all
   instruments as a proportion of total capital (returns accountCurveGroup)
@@ -3387,17 +3399,21 @@ acc_curve.costs.annual.median() ## median of annual costs
 ... or other interesting methods:
 
 ```python
-acc_curve.rolling_ann_std() ## rolling annual standard deviation of daily (net) returns
-acc_curve.gross.curve() ## cumulated returns = account curve of gross daily returns
-acc_curve.net.monthly.drawdown() ## drawdown of monthly net returns
-acc_curve.costs.weekly.curve() ## cumulated weekly costs
+import syscore.pandas.strategy_functions
+
+acc_curve.rolling_ann_std()  ## rolling annual standard deviation of daily (net) returns
+acc_curve.gross.curve()  ## cumulated returns = account curve of gross daily returns
+syscore.pandas.strategy_functions.drawdown()  ## drawdown of monthly net returns
+acc_curve.costs.weekly.curve()  ## cumulated weekly costs
 ```
 
 Personally I prefer looking at statistics in percentage terms. This is easy.
 Just use the .percent property before you use any statistical method:
 
 ```python
-acc_curve.capital ## tells me the capital I will use to calculate %
+import syscore.pandas.strategy_functions
+
+acc_curve.capital  ## tells me the capital I will use to calculate %
 acc_curve.percent
 acc_curve.gross.daily.percent
 acc_curve.net.daily.percent
@@ -3409,7 +3425,7 @@ acc_curve.daily.percent.ann_std()
 acc_curve.costs.annual.percent.median()
 acc_curve.percent.rolling_ann_std()
 acc_curve.gross.percent.curve()
-acc_curve.net.monthly.percent.drawdown()
+syscore.pandas.strategy_functions.drawdown()
 acc_curve.costs.weekly.percent.curve()
 ```
 
@@ -3648,7 +3664,7 @@ across individual instruments in isolation, then I need to take
 proportion of the sum of all the relevant forecast weight * FDM * instrument
 weight * IDM; this is equivalent to the rules risk contribution within the
 system. . This is an unweighted curve in one sense (it's not a proportion of
-total capital), but it's weighted in another (the indiviaul curves when added
+total capital), but it's weighted in another (the individual curves when added
 up give the group curve). The total account curve will have the same target
 risk as the entire system. The individual curves within it are for each
 instrument, weighted by their contribution to risk.
@@ -3681,7 +3697,7 @@ returns the two sided t-test statistic and p-value for a null hypothesis of a
 zero mean.
 
 Sometimes you might want to compare the performance of two systems, instruments
-or trading rules. The function `from syscore.accounting import account_test`
+or trading rules. The function `from syscore.accounting import account_t_test`
 can be used for this purpose. The two parameters can be anything that looks
 like an account curve, no matter where you got it from.
 
@@ -3779,27 +3795,27 @@ multipliers, optimisation, and capital correction.
 
 There are a number of different ways one might want to specify path and file names. Firstly, we could use a *relative* pathname. Secondly, we might want to use an *absolute* path, which is the actual full pathname. This is useful if we want to access something outside the pysystemtrade directory structure. Finally we have the issue of OS differences; are you a '\\' or a '/' person?
 
-For convenience I have written some functions that translate betweeen these different formats, and the underlying OS representation.
+For convenience I have written some functions that translate between these different formats, and the underlying OS representation.
 
 ```python
-from syscore.fileutils import get_resolved_pathname, get_filename_for_package
+from syscore.fileutils import get_resolved_pathname, resolve_path_and_filename_for_package
 
 # Resolve both filename and pathname jointly. Useful when writing the name of eg a configuration file
 ## Absolute format
 ### Windows (note use of double backslash in str) Make sure you include the initial backslash, or will be treated as relative format
-get_filename_for_package("\\home\\rob\\file.csv")
+resolve_path_and_filename_for_package("\\home\\rob\\file.csv")
 
 ### Unix. Make sure you include the initial forward slash,
-get_filename_for_package("/home/rob/file.csv")
+resolve_path_and_filename_for_package("/home/rob/file.csv")
 
 ## Relative format to find a file in the installed pysystemtrade
 ### Dot format. Notice there is no initial 'dot' and we don't need to include 'pysystemtrade'
-get_filename_for_package("syscore.tests.pricedata.csv")
+resolve_path_and_filename_for_package("syscore.tests.pricedata.csv")
 
 # Specify the path and filename separately
-get_filename_for_package("\\home\\rob","file.csv")
-get_filename_for_package("/home/rob","file.csv")
-get_filename_for_package("syscore.tests","pricedata.csv")
+resolve_path_and_filename_for_package("\\home\\rob", "file.csv")
+resolve_path_and_filename_for_package("/home/rob", "file.csv")
+resolve_path_and_filename_for_package("syscore.tests", "pricedata.csv")
 
 # Resolve just the pathname
 get_resolved_pathname("/home/rob")
@@ -3809,13 +3825,13 @@ get_resolved_pathname("syscore.tests")
 ## DON'T USE THESE:-
 ### It's possible to use Unix or Windows for relative filenames, but I prefer not to, so there is a clearer disctinction between absolute and relative.
 ### However this works:
-get_filename_for_package("syscore/tests/pricedata.csv")
+resolve_path_and_filename_for_package("syscore/tests/pricedata.csv")
 
 ### Similarly, I prefer not to use dot format for absolute filenames but it will work
-get_filename_for_package(".home.rob.file.csv")
+resolve_path_and_filename_for_package(".home.rob.file.csv")
 
 ### Finally, You can mix and match the above formats in a single string, but it won't make the code very readable!
-get_filename_for_package("\\home/rob.file.csv")
+resolve_path_and_filename_for_package("\\home/rob.file.csv")
 
 ```
 
@@ -4281,7 +4297,7 @@ Types are one or more of D, I, O:
   wiring](#stage_wiring). The description will list the source of the data.
 - Key **O**utput: A method whose output is used by other stages. See [stage
   wiring](#stage_wiring). Note this excludes items only used by specific
-  trading rules (noteably rawdata.daily_annualised_roll)
+  trading rules (notably rawdata.daily_annualised_roll)
 
 Private methods are excluded from this table.
 
@@ -4557,7 +4573,7 @@ trading rule variation names. Defaults: n/a
 The set of trading rules. A trading rule definition consists of a dict
 containing: a *function* identifying string, an optional list of *data*
 identifying strings, and *other_args* an optional dictionary containing named
-paramters to be passed to the function. This is the only method that can be
+parameters to be passed to the function. This is the only method that can be
 used for YAML.
 
 There are numerous other ways to define trading rules using python code. See
@@ -4991,7 +5007,7 @@ buffer_size: 0.10
 
 ### Accounting stage
 
-#### Buffering and position intertia
+#### Buffering and position inertia
 
 To work out the portfolio positions should we trade to the edge of the
 [buffer](#buffer), or to the optimal position?

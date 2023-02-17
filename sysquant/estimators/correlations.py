@@ -6,8 +6,8 @@ import pandas as pd
 import numpy as np
 
 from dataclasses import dataclass
-from syscore.objects import arg_not_supplied
-from syscore.pdutils import must_have_item
+from syscore.constants import arg_not_supplied
+from syscore.pandas.pdutils import get_index_of_columns_in_df_with_at_least_one_value
 
 from sysquant.fitting_dates import fitDates, listOfFittingDates
 from sysquant.estimators.generic_estimator import Estimate
@@ -76,7 +76,13 @@ class correlationEstimate(Estimate):
 
         return self.shrink(prior_corr, shrinkage_corr=shrinkage_corr)
 
+    def shrink_to_offdiag(self, offdiag=0.0, shrinkage_corr: float = 1.0):
+        prior_corr = self.boring_corr_matrix(offdiag=offdiag)
+
+        return self.shrink(prior_corr=prior_corr, shrinkage_corr=shrinkage_corr)
+
     def shrink(self, prior_corr: "correlationEstimate", shrinkage_corr: float = 1.0):
+
         if shrinkage_corr == 1.0:
             return prior_corr
 
@@ -113,7 +119,9 @@ class correlationEstimate(Estimate):
 
         # must_haves are items with data in this period, so we need some
         # kind of correlation
-        must_haves = must_have_item(current_period_data)
+        must_haves = get_index_of_columns_in_df_with_at_least_one_value(
+            current_period_data
+        )
 
         clean_correlation = self.clean_correlations(must_haves, offdiag=offdiag)
 
@@ -156,14 +164,7 @@ class correlationEstimate(Estimate):
         return corr_matrix
 
     def average_corr(self) -> float:
-        new_corr_values = copy(self.values)
-        np.fill_diagonal(new_corr_values, np.nan)
-        if np.all(np.isnan(new_corr_values)):
-            return np.nan
-
-        avg_corr = np.nanmean(new_corr_values)
-
-        return avg_corr
+        return average_correlation(self)
 
     def ordered_correlation_matrix(self):
         list_of_keys = list(self.columns)
@@ -473,3 +474,22 @@ def modify_correlation(
         corr_matrix = corr_matrix.shrink_to_average(shrinkage)
 
     return corr_matrix
+
+
+def average_correlation(corr_matrix: correlationEstimate) -> float:
+    new_corr_values = copy(corr_matrix.values)
+    np.fill_diagonal(new_corr_values, np.nan)
+    if np.all(np.isnan(new_corr_values)):
+        return np.nan
+
+    avg_corr = np.nanmean(new_corr_values)
+
+    return avg_corr
+
+
+def get_near_psd(A: np.array):
+    C = (A + A.T) / 2
+    eigval, eigvec = np.linalg.eig(C)
+    eigval[eigval < 0] = 0
+
+    return np.array(eigvec.dot(np.diag(eigval)).dot(eigvec.T))

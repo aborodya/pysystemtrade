@@ -29,7 +29,7 @@ class portfolioOptimiser:
         net_returns: returnsForOptimisation,
         log: logger = logtoscreen("optimiser"),
         method="handcraft",
-        **weighting_args
+        **weighting_args,
     ):
 
         self._net_returns = net_returns
@@ -167,7 +167,7 @@ class portfolioOptimiser:
         estimator = getattr(self, store_as_name, None)
         if estimator is None:
             estimator = self._get_estimator(param_entry)
-            setattr(self, param_entry, estimator)
+            setattr(self, store_as_name, estimator)
 
         return estimator
 

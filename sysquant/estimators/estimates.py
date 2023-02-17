@@ -2,7 +2,7 @@ import numpy as np
 from dataclasses import dataclass
 
 from syscore.genutils import str2Bool, flatten_list
-from syscore.pdutils import how_many_times_a_year_is_pd_frequency
+from syscore.pandas.frequency import how_many_times_a_year_is_pd_frequency
 
 from sysquant.estimators.correlations import correlationEstimate
 from sysquant.estimators.mean_estimator import meanEstimates
@@ -95,7 +95,7 @@ class Estimates:
 
     def assets_with_missing_data(self) -> list:
         missing_correlations = self.correlation.assets_with_missing_data()
-        missing_means = self.correlation.assets_with_missing_data()
+        missing_means = self.mean.assets_with_missing_data()
         missing_stdev = self.stdev.assets_with_missing_data()
 
         missing_assets = list(

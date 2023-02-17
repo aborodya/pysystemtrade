@@ -3,7 +3,7 @@ import numpy as np
 from scipy.stats import skew, ttest_1samp, norm
 
 from syscore.dateutils import Frequency, from_frequency_to_times_per_year
-from syscore.pdutils import drawdown
+from syscore.pandas.strategy_functions import drawdown
 
 from systems.accounts.pandl_calculators.pandl_generic_costs import (
     GROSS_CURVE,
@@ -230,7 +230,7 @@ class accountCurve(pd.Series):
     @property
     def vol_scalar(self) -> float:
         times_per_year = from_frequency_to_times_per_year(self.frequency)
-        return times_per_year ** 0.5
+        return times_per_year**0.5
 
     def sharpe(self):
         mean_return = self.ann_mean()
@@ -341,23 +341,14 @@ class accountCurve(pd.Series):
         return np.mean([upper, lower])
 
     def quant_ratio_lower(self):
-        x = self.demeaned_remove_zeros()
-        raw_ratio = x.quantile(QUANT_PERCENTILE_EXTREME) / x.quantile(
-            QUANT_PERCENTILE_STD
-        )
-        return raw_ratio / NORMAL_DISTR_RATIO
+        return quant_ratio_lower_curve(self)
 
     def quant_ratio_upper(self):
-        x = self.demeaned_remove_zeros()
-        raw_ratio = x.quantile(1 - QUANT_PERCENTILE_EXTREME) / x.quantile(
-            1 - QUANT_PERCENTILE_STD
-        )
-        return raw_ratio / NORMAL_DISTR_RATIO
+        return quant_ratio_upper_curve(self)
 
     def demeaned_remove_zeros(self):
         x = self.as_ts
-        x[x == 0] = np.nan
-        return x - x.mean()
+        return demeaned_remove_zeros(x)
 
     def stats(self):
 
@@ -397,3 +388,24 @@ class accountCurve(pd.Series):
         )
 
         return [build_stats, comment1]
+
+
+def quant_ratio_lower_curve(x: pd.Series):
+    demeaned_x = demeaned_remove_zeros(x)
+    raw_ratio = demeaned_x.quantile(QUANT_PERCENTILE_EXTREME) / demeaned_x.quantile(
+        QUANT_PERCENTILE_STD
+    )
+    return raw_ratio / NORMAL_DISTR_RATIO
+
+
+def quant_ratio_upper_curve(x: pd.Series):
+    demeaned_x = demeaned_remove_zeros(x)
+    raw_ratio = demeaned_x.quantile(1 - QUANT_PERCENTILE_EXTREME) / demeaned_x.quantile(
+        1 - QUANT_PERCENTILE_STD
+    )
+    return raw_ratio / NORMAL_DISTR_RATIO
+
+
+def demeaned_remove_zeros(x: pd.Series) -> pd.Series:
+    x[x == 0] = np.nan
+    return x - x.mean()

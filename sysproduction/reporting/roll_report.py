@@ -1,4 +1,6 @@
-from syscore.objects import body_text
+from typing import Optional
+from sysobjects.production.roll_state import ALL_ROLL_INSTRUMENTS
+from sysproduction.reporting.reporting_functions import body_text
 
 # We want a roll report (We could merge this into another kind of report)
 # We want to be able to have it emailed, or run it offline
@@ -6,10 +8,13 @@ from syscore.objects import body_text
 # Reports consist of multiple calls to functions with data object, each of which returns a displayable object
 # We also chuck in a title and a timestamp
 from sysproduction.reporting.api import reportingApi
-from sysproduction.reporting.data.rolls import ALL_ROLL_INSTRUMENTS
 
 
-def roll_info(data, instrument_code=ALL_ROLL_INSTRUMENTS):
+def roll_report(
+    data,
+    instrument_code=ALL_ROLL_INSTRUMENTS,
+    reporting_api: Optional[reportingApi] = None,
+):
     """
     Get some roll info. For all markets which are:
 
@@ -26,7 +31,8 @@ def roll_info(data, instrument_code=ALL_ROLL_INSTRUMENTS):
     :param: data blob
     :return: list of pd.DataFrame
     """
-    reporting_api = reportingApi(data)
+    if reporting_api is None:
+        reporting_api = reportingApi(data)
 
     formatted_output = []
 
@@ -48,3 +54,7 @@ def roll_info(data, instrument_code=ALL_ROLL_INSTRUMENTS):
     formatted_output.append(reporting_api.footer())
 
     return formatted_output
+
+
+if __name__ == "__main__":
+    roll_report()

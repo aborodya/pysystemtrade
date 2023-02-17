@@ -1,8 +1,8 @@
 import pandas as pd
 
 from syscore.dateutils import ROOT_BDAYS_INYEAR
-from syscore.objects import arg_not_supplied
-from syscore.pdutils import spread_out_annualised_return_over_periods
+from syscore.constants import arg_not_supplied
+from syscore.pandas.strategy_functions import spread_out_annualised_return_over_periods
 from sysquant.estimators.vol import robust_daily_vol_given_price
 from systems.accounts.pandl_calculators.pandl_generic_costs import (
     pandlCalculationWithGenericCosts,
@@ -17,7 +17,7 @@ class pandlCalculationWithSRCosts(pandlCalculationWithGenericCosts):
         SR_cost: float,
         average_position: pd.Series,
         daily_returns_volatility: pd.Series = arg_not_supplied,
-        **kwargs
+        **kwargs,
     ):
         ## Is SR_cost a negative number?
         super().__init__(*args, **kwargs)

@@ -12,7 +12,7 @@ class pandlCalculationWithoutPositions(pandlCalculationWithGenericCosts):
         capital: pd.Series,
     ):
 
-        super().__init__(price=pd.Series(), capital=capital)
+        super().__init__(price=pd.Series(dtype="float64"), capital=capital)
 
         self._pandl_in_base_currency = pandl_in_base_currency
         self._costs_pandl_in_base_currency = costs_pandl_in_base_currency
@@ -101,7 +101,7 @@ class dictOfPandlCalculatorsWithGenericCosts(dict):
 
 
 def sum_list_of_pandl_curves(list_of_pandl_curves: list):
-    df_of_pandl_curves = pd.concat(list_of_pandl_curves, axis=1)
+    df_of_pandl_curves = pd.concat(list_of_pandl_curves, axis=1, sort=True)
     summed_pandl_curve = df_of_pandl_curves.sum(axis=1)
 
     return summed_pandl_curve

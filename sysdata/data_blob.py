@@ -1,7 +1,8 @@
 from copy import copy
 
 from sysbrokers.IB.ib_connection import connectionIB
-from syscore.objects import arg_not_supplied, get_class_name
+from syscore.objects import get_class_name
+from syscore.constants import arg_not_supplied
 from syscore.text import camel_case_split
 from sysdata.config.production_config import get_production_config, Config
 from sysdata.mongodb.mongo_connection import mongoDb
@@ -123,11 +124,11 @@ class dataBlob(object):
     def _add_ib_class(self, class_object):
         log = self._get_specific_logger(class_object)
         try:
-            resolved_instance = class_object(self.ib_conn, log=log)
+            resolved_instance = class_object(self.ib_conn, self, log=log)
         except Exception as e:
             class_name = get_class_name(class_object)
             msg = (
-                "Error %s couldn't evaluate %s(self.ib_conn, log = self.log.setup(component = %s)) This might be because (a) IB gateway not running, or (b) import is missing\
+                "Error %s couldn't evaluate %s(self.ib_conn, self, log = self.log.setup(component = %s)) This might be because (a) IB gateway not running, or (b) import is missing\
                          or (c) arguments don't follow pattern"
                 % (str(e), class_name, class_name)
             )
@@ -246,6 +247,9 @@ class dataBlob(object):
 
     def _add_attr_to_list(self, new_attr: str):
         self._attr_list.append(new_attr)
+
+    def update_log(self, new_log: logger):
+        self._log = new_log
 
     """
     Following two methods implement context manager

@@ -1,9 +1,9 @@
 import pandas as pd
 
-from syscore.algos import calculate_weighted_average_with_nans
+from syscore.maths import calculate_weighted_average_with_nans
 from syscore.genutils import str2Bool
 from syscore.dateutils import ROOT_BDAYS_INYEAR
-from syscore.pdutils import turnover
+from syscore.pandas.strategy_functions import turnover
 
 from sysquant.estimators.turnover import turnoverDataForTradingRule
 
@@ -29,9 +29,9 @@ class accountCosts(accountInputs):
 
         KEY OUTPUT
         """
+        ## Calculate holding and transaction seperately, as the former could be pooled
         transaction_cost = self.get_SR_transaction_cost_for_instrument_forecast(
-            instrument_code = instrument_code,
-            rule_variation_name = rule_variation_name
+            instrument_code=instrument_code, rule_variation_name=rule_variation_name
         )
         holding_cost = self.get_SR_holding_cost_only(instrument_code)
 
@@ -60,29 +60,29 @@ class accountCosts(accountInputs):
         )
 
         if use_pooled_costs:
-            SR_cost = self._get_SR_cost_for_rule_with_pooled_costs(
+            SR_cost = self._get_SR_transaction_costs_for_rule_with_pooled_costs(
                 instrument_code, rule_variation_name
             )
 
         else:
-            SR_cost = self._get_SR_cost_of_rule_for_individual_instrument(
+            SR_cost = self._get_SR_transaction_cost_of_rule_for_individual_instrument(
                 instrument_code, rule_variation_name
             )
         return SR_cost
 
     @input
-    def _get_SR_cost_for_rule_with_pooled_costs(
+    def _get_SR_transaction_costs_for_rule_with_pooled_costs(
         self, instrument_code: str, rule_variation_name: str
     ) -> float:
         instrument_code_list = self.has_same_rules_as_code(instrument_code)
-        SR_cost = self._get_SR_cost_instr_forecast_for_list(
+        SR_cost = self._get_SR_transaction_cost_instr_forecast_for_list(
             instrument_code_list, rule_variation_name
         )
 
         return SR_cost
 
     @diagnostic()
-    def _get_SR_cost_instr_forecast_for_list(
+    def _get_SR_transaction_cost_instr_forecast_for_list(
         self, instrument_code_list: list, rule_variation_name: str
     ) -> float:
         """
@@ -100,7 +100,7 @@ class accountCosts(accountInputs):
         """
 
         list_of_SR_cost = [
-            self._get_SR_cost_of_rule_for_individual_instrument(
+            self._get_SR_transaction_cost_of_rule_for_individual_instrument(
                 instrument_code, rule_variation_name
             )
             for instrument_code in instrument_code_list
@@ -147,16 +147,19 @@ class accountCosts(accountInputs):
         return len(forecast)
 
     @diagnostic()
-    def _get_SR_cost_of_rule_for_individual_instrument(
+    def _get_SR_transaction_cost_of_rule_for_individual_instrument(
         self, instrument_code: str, rule_variation_name: str
     ) -> float:
 
         # note the turnover may still be pooled..
         turnover = self.forecast_turnover(instrument_code, rule_variation_name)
 
-        SR_cost = self.get_SR_cost_given_turnover(instrument_code, turnover)
+        # holding costs calculated elsewhere
+        SR_cost_trading = self.get_SR_trading_cost_only_given_turnover(
+            instrument_code, turnover
+        )
 
-        return SR_cost
+        return SR_cost_trading
 
     @diagnostic()
     def get_SR_cost_given_turnover(
@@ -373,7 +376,6 @@ class accountCosts(accountInputs):
         average_vol = float(daily_vol[start_date:].mean())
 
         return average_vol
-
 
     @property
     def use_SR_costs(self) -> float:

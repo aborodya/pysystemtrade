@@ -61,6 +61,9 @@ class diagInstruments(productionDataLayerGeneric):
     def get_description(self, instrument_code: str) -> str:
         return self.get_meta_data(instrument_code).Description
 
+    def get_region(self, instrument_code: str) -> str:
+        return self.get_meta_data(instrument_code).Region
+
     def get_meta_data(self, instrument_code: str):
         return self.db_futures_instrument_data.get_instrument_data(
             instrument_code
@@ -88,3 +91,8 @@ class diagInstruments(productionDataLayerGeneric):
         ]
 
         return instrument_codes
+
+
+def get_block_size(data, instrument_code):
+    diag_instruments = diagInstruments(data)
+    return diag_instruments.get_point_size(instrument_code)

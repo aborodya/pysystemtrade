@@ -2,10 +2,13 @@ from collections import namedtuple
 
 import pandas as pd
 
-from syscore.dateutils import last_run_or_heartbeat_from_date_or_none
+from syscore.exceptions import missingData
 from syscore.genutils import transfer_object_attributes
-from syscore.objects import missing_data
-from syscore.pdutils import make_df_from_list_of_named_tuple
+from syscore.constants import missing_data
+from syscore.pandas.pdutils import (
+    make_df_from_list_of_named_tuple,
+    sort_df_ignoring_missing,
+)
 from sysobjects.production.tradeable_object import instrumentStrategy
 from sysproduction.data.control_process import dataControlProcess, diagControlProcess
 from sysproduction.data.controls import (
@@ -70,9 +73,20 @@ uses_instruments = [
 uses_fx_codes = ["update_fx_prices"]
 
 
-def get_overrides_as_df(data):
+def get_overrides_in_db_as_df(data):
     diag_overrides = diagOverrides(data)
-    all_overrides = diag_overrides.get_dict_of_all_overrides()
+    all_overrides = diag_overrides.get_dict_of_all_overrides_in_db_with_reasons()
+    all_overrides_as_list = [
+        dataOverride(key, value) for key, value in all_overrides.items()
+    ]
+    pdf = make_df_from_list_of_named_tuple(dataOverride, all_overrides_as_list)
+
+    return pdf
+
+
+def get_all_overrides_as_df(data):
+    diag_overrides = diagOverrides(data)
+    all_overrides = diag_overrides.get_dict_of_all_overrides_with_reasons()
     all_overrides_as_list = [
         dataOverride(key, value) for key, value in all_overrides.items()
     ]
@@ -130,21 +144,21 @@ def get_control_status_list_for_all_processes_as_df(data):
 def get_control_data_list_for_all_methods_as_df(data):
     cd_list = get_control_data_list_for_all_methods(data)
     pdf = make_df_from_list_of_named_tuple(dataForMethod, cd_list)
-    pdf = pdf.sort_values("last_start")
+    pdf = sort_df_ignoring_missing(pdf, "last_start")
     return pdf
 
 
 def get_control_status_list_for_all_methods_as_df(data):
     cd_list = get_control_data_list_for_all_methods(data)
     pdf = make_df_from_list_of_named_tuple(dataForMethod, cd_list)
-    pdf = pdf.sort_values("last_start")
+    pdf = sort_df_ignoring_missing(pdf, "last_start")
     return pdf
 
 
 def get_last_price_updates_as_df(data):
     cd_list = get_list_of_last_price_updates(data)
     pdf = make_df_from_list_of_named_tuple(genericUpdate, cd_list)
-    pdf = pdf.sort_values("last_update")
+    pdf = sort_df_ignoring_missing(pdf, "last_update")
 
     return pdf
 
@@ -152,7 +166,7 @@ def get_last_price_updates_as_df(data):
 def get_last_optimal_position_updates_as_df(data):
     cd_list = get_list_of_last_position_updates(data)
     pdf = make_df_from_list_of_named_tuple(genericUpdate, cd_list)
-    pdf = pdf.sort_values("last_update")
+    pdf = sort_df_ignoring_missing(pdf, "last_update")
 
     return pdf
 
@@ -234,10 +248,11 @@ def get_last_position_update_for_strategy_instrument(
         instrument_code=instrument_code, strategy_name=strategy_name
     )
 
-    pos_data = op.get_optimal_position_as_df_for_instrument_strategy(
-        instrument_strategy
-    )
-    if pos_data is missing_data:
+    try:
+        pos_data = op.get_optimal_position_as_df_for_instrument_strategy(
+            instrument_strategy
+        )
+    except missingData:
         return None
     last_update = pos_data.index[-1]
     key = "%s/%s" % (strategy_name, instrument_code)
@@ -294,19 +309,23 @@ def get_control_data_for_single_ordinary_method(data, method_name_and_process):
     method, process_name = method_name_and_process
     data_control = diagControlProcess(data)
 
-    last_start = data_control.when_method_last_started(process_name, method)
-    last_start_as_str = last_run_or_heartbeat_from_date_or_none(last_start)
+    try:
+        last_start = data_control.when_method_last_started(process_name, method)
+    except missingData:
+        last_start = missing_data
 
-    last_end = data_control.when_method_last_ended(process_name, method)
-    last_end_as_str = last_run_or_heartbeat_from_date_or_none(last_end)
+    try:
+        last_end = data_control.when_method_last_ended(process_name, method)
+    except missingData:
+        last_end = missing_data
 
     currently_running = data_control.method_currently_running(process_name, method)
 
     data_for_method = dataForMethod(
         method_or_strategy=method,
         process_name=process_name,
-        last_start=last_start_as_str,
-        last_end=last_end_as_str,
+        last_start=last_start,
+        last_end=last_end,
         currently_running=str(currently_running),
     )
 

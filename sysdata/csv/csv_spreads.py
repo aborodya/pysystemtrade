@@ -3,9 +3,12 @@ import pandas as pd
 from sysdata.futures.spreads import spreadsForInstrumentData
 
 from sysobjects.spreads import spreadsForInstrument
-from syscore.fileutils import get_filename_for_package, files_with_extension_in_pathname
-from syscore.pdutils import pd_readcsv
-from syscore.objects import arg_not_supplied
+from syscore.fileutils import (
+    resolve_path_and_filename_for_package,
+    files_with_extension_in_pathname,
+)
+from syscore.pandas.pdutils import pd_readcsv
+from syscore.constants import arg_not_supplied
 from syslogdiag.log_to_screen import logtoscreen
 
 DATE_INDEX_NAME = "DATETIME"
@@ -15,7 +18,7 @@ SPREAD_COLUMN_NAME = "spread"
 class csvSpreadsForInstrumentData(spreadsForInstrumentData):
     """
 
-    Class for adjusted prices write / to from csv
+    Class for spreads write / to from csv
     """
 
     def __init__(
@@ -47,7 +50,7 @@ class csvSpreadsForInstrumentData(spreadsForInstrumentData):
         try:
             spreads_from_pd = pd_readcsv(filename, date_index_name=DATE_INDEX_NAME)
         except OSError:
-            self.log.warn("Can't find adjusted price file %s" % filename)
+            self.log.warn("Can't find spread file %s" % filename)
             return spreadsForInstrument()
 
         spreads_as_series = pd.Series(spreads_from_pd[SPREAD_COLUMN_NAME])
@@ -72,4 +75,6 @@ class csvSpreadsForInstrumentData(spreadsForInstrumentData):
         spreads.to_csv(filename, index_label=DATE_INDEX_NAME)
 
     def _filename_given_instrument_code(self, instrument_code: str):
-        return get_filename_for_package(self.datapath, "%s.csv" % (instrument_code))
+        return resolve_path_and_filename_for_package(
+            self.datapath, "%s.csv" % (instrument_code)
+        )

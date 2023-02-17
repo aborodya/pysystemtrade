@@ -1,6 +1,6 @@
 
 
-Here is a whistlestop tour of what pysystemtrade can currently do. You'll probably want to read the [users guide](backtesting.md) after this.
+Here is a whistle-stop tour of what pysystemtrade can currently do. You'll probably want to read the [users guide](backtesting.md) after this.
 Notice that you will see different results than shown here, as you will be using more up to date data.
 
 ## A simple trading rule
@@ -173,12 +173,14 @@ account.percent.stats()
 Looks like we did make a few bucks. `account`, by the way inherits from a pandas data frame. Here are some other things we can do with it:
 
 ```python
-account.sharpe() ## get the Sharpe Ratio (annualised), and any other statistic which is in the stats list
-account.curve().plot() ## plot the cumulative account curve (equivalent to account.cumsum().plot() inicidentally)
-account.percent ## gives a % curve
-account.percent.drawdown().plot() ## see the drawdowns as a percentage
-account.weekly ## weekly returns (also daily [default], monthly, annual)
-account.gross.ann_mean() ## annual mean for gross returns, also costs (there are none in this simple example)
+import syscore.pandas.strategy_functions
+
+account.sharpe()  ## get the Sharpe Ratio (annualised), and any other statistic which is in the stats list
+account.curve().plot()  ## plot the cumulative account curve (equivalent to account.cumsum().plot() inicidentally)
+account.percent  ## gives a % curve
+syscore.pandas.strategy_functions.drawdown().plot()  ## see the drawdowns as a percentage
+account.weekly  ## weekly returns (also daily [default], monthly, annual)
+account.gross.ann_mean()  ## annual mean for gross returns, also costs (there are none in this simple example)
 ```
 
 [Here](notebooks/introduction_with_fxdata.ipynb) you can find a modified version of this example using IB data instead of pre-baked CSV data files.
@@ -207,7 +209,7 @@ For now let's start with the simplest possible system, one which contains only a
 from sysdata.sim.csv_futures_sim_data import csvFuturesSimData
 data=csvFuturesSimData()
 
-from systems.provided.example.rules import ewmac_forecast_with_defaults as ewmac
+from systems.provided.rules.ewmac import ewmac_forecast_with_defaults as ewmac
 ```
 
 This is a slightly different version of the rule we defined before, which has default values for `Lfast` and `Lslow`. Now there are many ways to create a set of trading rules; here is the simplest:
@@ -279,7 +281,7 @@ ewmac_rule
 TradingRule; function: <function ewmac_forecast_with_defaults at 0xb734ca4c>, data:  and other_args:
 ```
 
-Time to reveal what the mysterious object is. A `TradingRule` contains 3 elements - a function, a list of any data the function needs, and a dict of any other arguments that can be passed to the function. So the function is just the `ewmac` function that we imported earlier, and in this trivial case there is no data, and no arguments. Having no data is fine, because the code assumes that you'd normally want to pass the price of an instrument to a trading rule if you don't tell it otherwise. Furthermore on this occassion having no arguments is also no problem since the ewmac function we're using includes some defaults.
+Time to reveal what the mysterious object is. A `TradingRule` contains 3 elements - a function, a list of any data the function needs, and a dict of any other arguments that can be passed to the function. So the function is just the `ewmac` function that we imported earlier, and in this trivial case there is no data, and no arguments. Having no data is fine, because the code assumes that you'd normally want to pass the price of an instrument to a trading rule if you don't tell it otherwise. Furthermore on this occasion having no arguments is also no problem since the ewmac function we're using includes some defaults.
 
 *If you're familiar with the concept in python of args and kwargs; `data` is a bit like args - we always pass a list of positional arguments to `function`; and `other_args` are a bit like kwargs - we always pass in a dict of named arguments to `function`*
 
@@ -629,7 +631,7 @@ profits.gross.percent.stats() ## all other things work eg profits.gross.sharpe()
 profits.costs.percent.stats()
 ```
 
-For more see the costs and accountCurve section of the userguide.
+For more see the costs and accountCurve section of the user guide.
 
 
 ## Getting config from dictionaries and files
@@ -657,7 +659,7 @@ my_config=Config("systems.provided.example.simplesystemconfig.yaml")
 
 (Notice we don't put filenames in; rather a python style reference within the project)
 
-If you look at the YAML file you'll notice that the trading rule function has been specified as a string `systems.provided.example.rules.ewmac_forecast_with_defaults`. This is because we can't easily create a function in a YAML text file (*we can in theory; but it's quite a bit of work and creates a potential security risk*). Instead we specify where the relevant function can be found in the project directory structure.
+If you look at the YAML file you'll notice that the trading rule function has been specified as a string `systems.provided.rules.ewmac.ewmac_forecast_with_defaults`. This is because we can't easily create a function in a YAML text file (*we can in theory; but it's quite a bit of work and creates a potential security risk*). Instead we specify where the relevant function can be found in the project directory structure.
 
 Similarly for the ewmac8 rule we've specified a data source `data.daily_prices` which points to `system.data.daily_prices()`. This is the default, which is why we haven't needed to specify it before, and it isn't included in the specification for the ewmac32 rule. Equally we could specify any attribute and method within the system object, as long as it takes the argument `instrument_code`. We can also have a list of data inputs. This means you can configure almost any trading rule quite easily through configuration changes.
 

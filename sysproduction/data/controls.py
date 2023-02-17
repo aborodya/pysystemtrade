@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from sysobjects.production.position_limits import positionLimitAndPosition
 
-from sysdata.config.production_config import get_production_config
+from syscore.exceptions import missingData
+
 from sysdata.config.instruments import (
     get_list_of_bad_instruments_in_config,
     get_duplicate_list_of_instruments_to_remove_from_config,
@@ -13,11 +13,13 @@ from sysdata.mongodb.mongo_position_limits import mongoPositionLimitData
 from sysdata.mongodb.mongo_trade_limits import mongoTradeLimitData
 from sysdata.mongodb.mongo_override import mongoOverrideData
 from sysdata.mongodb.mongo_IB_client_id import mongoIbBrokerClientIdData
+from sysdata.mongodb.mongo_temporary_close import mongoTemporaryCloseData
 
 from sysdata.production.broker_client_id import brokerClientIdData
 from sysdata.production.locks import lockData
 from sysdata.production.trade_limits import tradeLimitData
 from sysdata.production.override import overrideData
+from sysdata.production.temporary_close import temporaryCloseData
 from sysdata.production.position_limits import (
     positionLimitData,
     positionLimitForInstrument,
@@ -36,17 +38,18 @@ from sysobjects.production.tradeable_object import (
     instrumentStrategy,
 )
 from sysobjects.production.override import Override
-
-
-from sysproduction.data.positions import diagPositions
-from sysproduction.data.generic_production_data import productionDataLayerGeneric
-
+from sysobjects.production.position_limits import positionLimitAndPosition, NO_LIMIT
 from sysobjects.production.override import (
     NO_TRADE_OVERRIDE,
     REDUCE_ONLY_OVERRIDE,
     DEFAULT_OVERRIDE,
 )
 
+from sysproduction.data.positions import diagPositions
+from sysproduction.data.generic_production_data import productionDataLayerGeneric
+
+OVERRIDE_FOR_BAD = REDUCE_ONLY_OVERRIDE
+OVERRIDE_FOR_BAD = REDUCE_ONLY_OVERRIDE
 OVERRIDE_FOR_BAD = REDUCE_ONLY_OVERRIDE
 OVERRIDE_FOR_UNTRADEABLE = NO_TRADE_OVERRIDE
 OVERRIDE_FOR_IGNORED = REDUCE_ONLY_OVERRIDE
@@ -177,6 +180,9 @@ class dataTradeLimits(productionDataLayerGeneric):
         )
 
 
+OVERRIDE_REASON_IN_DATABASE = "in database"
+
+
 class diagOverrides(productionDataLayerGeneric):
     def _add_required_classes_to_data(self, data) -> dataBlob:
         data.add_class_object(mongoOverrideData)
@@ -186,18 +192,25 @@ class diagOverrides(productionDataLayerGeneric):
     def db_override_data(self) -> overrideData:
         return self.data.db_override
 
-    def get_dict_of_all_overrides(self) -> dict:
-        all_overrides_in_db = self.db_override_data.get_dict_of_all_overrides()
-        all_overrides_in_db_with_reason = dict(
-            [
-                (key, OverrideWithReason(override, "in database"))
-                for key, override in all_overrides_in_db.items()
-            ]
+    def get_dict_of_all_overrides_with_reasons(self) -> dict:
+        all_overrides_in_db_with_reason = (
+            self.get_dict_of_all_overrides_in_db_with_reasons()
         )
         all_overrides_in_config = self.get_dict_of_all_overrides_in_config()
         all_overrides = {**all_overrides_in_db_with_reason, **all_overrides_in_config}
 
         return all_overrides
+
+    def get_dict_of_all_overrides_in_db_with_reasons(self) -> dict:
+        all_overrides_in_db = self.db_override_data.get_dict_of_all_overrides()
+        all_overrides_in_db_with_reason = dict(
+            [
+                (key, OverrideWithReason(override, OVERRIDE_REASON_IN_DATABASE))
+                for key, override in all_overrides_in_db.items()
+            ]
+        )
+
+        return all_overrides_in_db_with_reason
 
     def get_cumulative_override_for_instrument_strategy(
         self, instrument_strategy: instrumentStrategy
@@ -399,13 +412,17 @@ class updateOverrides(productionDataLayerGeneric):
 
 
 class dataPositionLimits(productionDataLayerGeneric):
-    def _add_required_classes_to_data(self, data) -> dataBlob:
-        data.add_class_object(mongoPositionLimitData)
+    def _add_required_classes_to_data(self, data: dataBlob) -> dataBlob:
+        data.add_class_list([mongoPositionLimitData, mongoTemporaryCloseData])
         return data
 
     @property
     def db_position_limit_data(self) -> positionLimitData:
         return self.data.db_position_limit
+
+    @property
+    def db_temporary_close_data(self) -> temporaryCloseData:
+        return self.data.db_temporary_close
 
     def cut_down_proposed_instrument_trade_for_position_limits(
         self, order: instrumentOrder
@@ -450,26 +467,25 @@ class dataPositionLimits(productionDataLayerGeneric):
         # Ignore warning instrumentOrder inherits from Order
         return max_order_ok_against_instrument_strategy
 
-    def get_spare_checking_all_position_limits(
+    def get_maximum_position_contracts_for_instrument_strategy(
         self, instrument_strategy: instrumentStrategy
-    ) -> float:
-        spare_for_instrument = self.get_spare_for_instrument(
+    ) -> int:
+
+        ## FIXME: THIS WON'T WORK IF THERE ARE MULTIPLE STRATEGIES TRADING AN INSTRUMENT
+
+        limit_for_instrument = self._get_position_limit_object_for_instrument(
             instrument_strategy.instrument_code
         )
-        spare_for_instrument_strategy = self.get_spare_for_instrument_strategy(
-            instrument_strategy
+
+        limit_for_instrument_strategy = (
+            self._get_position_limit_object_for_instrument_strategy(instrument_strategy)
         )
 
-        return min([abs(spare_for_instrument), abs(spare_for_instrument_strategy)])
-
-    def get_spare_for_instrument_strategy(
-        self, instrument_strategy: instrumentStrategy
-    ) -> float:
-        position_and_limit = self._get_limit_and_position_for_instrument_strategy(
-            instrument_strategy
+        minimum_limit_contracts = limit_for_instrument.minimum_position_limit(
+            limit_for_instrument_strategy
         )
 
-        return position_and_limit.spare
+        return minimum_limit_contracts
 
     def _get_limit_and_position_for_instrument_strategy(
         self, instrument_strategy: instrumentStrategy
@@ -516,13 +532,6 @@ class dataPositionLimits(productionDataLayerGeneric):
 
         # Ignore warning instrumentOrder inherits from Order
         return max_order_ok_against_instrument
-
-    def get_spare_for_instrument(self, instrument_code: str) -> float:
-        position_and_limit = self._get_limit_and_position_for_instrument(
-            instrument_code
-        )
-
-        return position_and_limit.spare
 
     def _get_limit_and_position_for_instrument(
         self, instrument_code: str
@@ -632,6 +641,43 @@ class dataPositionLimits(productionDataLayerGeneric):
         )
 
         return strategy_instrument_list_limits
+
+    ## Temporary limits used by roll code
+
+    def temporarily_set_position_limit_to_zero_and_store_original_limit(
+        self, instrument_code
+    ):
+        original_limit = self._get_position_limit_object_for_instrument(instrument_code)
+        self.db_temporary_close_data.add_stored_position_limit(original_limit)
+        self.set_abs_position_limit_for_instrument(instrument_code, 0)
+
+        self.log.msg(
+            "Temporarily setting position limit, was %s, now zero"
+            % (str(original_limit))
+        )
+
+    def reset_position_limit_for_instrument_to_original_value(self, instrument_code):
+        try:
+            original_limit = (
+                self.db_temporary_close_data.get_stored_position_limit_for_instrument(
+                    instrument_code
+                )
+            )
+        except missingData:
+            self.log.warn("No temporary position limit stored")
+            return None
+
+        self.set_abs_position_limit_for_instrument(
+            instrument_code, original_limit.position_limit
+        )
+
+        self.db_temporary_close_data.clear_stored_position_limit_for_instrument(
+            instrument_code
+        )
+        self.log.msg(
+            "Reset position limit from temporary zero limit, now %s"
+            % str(original_limit)
+        )
 
     ## set limits
 

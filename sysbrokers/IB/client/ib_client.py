@@ -36,7 +36,8 @@ class ibClient(object):
 
         # means our first call won't be throttled for pacing
         self.last_historic_price_calltime = (
-            datetime.datetime.now() - datetime.timedelta(seconds=PACING_INTERVAL_SECONDS)
+            datetime.datetime.now()
+            - datetime.timedelta(seconds=PACING_INTERVAL_SECONDS)
         )
 
         # Add error handler
@@ -102,10 +103,3 @@ class ibClient(object):
 
     def refresh(self):
         self.ib.sleep(0.00001)
-
-    def get_broker_time_local_tz(self) -> datetime.datetime:
-        ib_time = self.ib.reqCurrentTime()
-        local_ib_time_with_tz = ib_time.astimezone(tz.tzlocal())
-        local_ib_time = strip_timezone_fromdatetime(local_ib_time_with_tz)
-
-        return local_ib_time

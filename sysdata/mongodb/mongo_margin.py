@@ -1,6 +1,7 @@
 import pandas as pd
 from syscore.dateutils import long_to_datetime, datetime_to_long
-from syscore.objects import arg_not_supplied, missing_data
+from syscore.exceptions import missingData
+from syscore.constants import arg_not_supplied
 from sysdata.mongodb.mongo_generic import mongoDataWithSingleKey
 
 from sysdata.production.margin import marginData, seriesOfMargin
@@ -44,43 +45,43 @@ class mongoMarginData(marginData):
         return series_of_margin
 
     def _get_data_dict_for_strategy_margin(self, strategy_name: str) -> dict:
-        data_dict = self.mongo_data.get_result_dict_for_key_without_key_value(strategy_name)
-        if data_dict is missing_data:
+        try:
+            data_dict = self.mongo_data.get_result_dict_for_key_without_key_value(
+                strategy_name
+            )
+        except missingData:
             return dict()
 
         return data_dict
 
-    def _write_series_of_strategy_margin(self, strategy_name: str,
-                                         series_of_margin: seriesOfMargin):
+    def _write_series_of_strategy_margin(
+        self, strategy_name: str, series_of_margin: seriesOfMargin
+    ):
         data_dict = from_series_of_margin_to_dict_of_entries(series_of_margin)
-        self.mongo_data.add_data(strategy_name,
-                                 data_dict,
-                                 allow_overwrite=True)
+        self.mongo_data.add_data(strategy_name, data_dict, allow_overwrite=True)
 
     def _get_list_of_strategies_with_margin_including_total(self) -> list:
         return self.mongo_data.get_list_of_keys()
 
-def from_dict_of_entries_to_margin_series(dict_of_entries: dict) ->seriesOfMargin:
+
+def from_dict_of_entries_to_margin_series(dict_of_entries: dict) -> seriesOfMargin:
     list_of_keys = dict_of_entries.keys()
-    list_of_keys_as_datetime = [long_to_datetime(int(key_entry))
-                                for key_entry in list_of_keys]
+    list_of_keys_as_datetime = [
+        long_to_datetime(int(key_entry)) for key_entry in list_of_keys
+    ]
     list_of_values = list(dict_of_entries.values())
 
-    pd_series = pd.Series(list_of_values, index = list_of_keys_as_datetime)
+    pd_series = pd.Series(list_of_values, index=list_of_keys_as_datetime)
     pd_series = pd_series.sort_index()
 
     return seriesOfMargin(pd_series)
 
+
 def from_series_of_margin_to_dict_of_entries(series_of_margin: seriesOfMargin) -> dict:
     series_of_dates = list(series_of_margin.index)
-    list_of_keys = [str(datetime_to_long(date_entry))
-                    for date_entry in series_of_dates]
+    list_of_keys = [str(datetime_to_long(date_entry)) for date_entry in series_of_dates]
     list_of_values = list(series_of_margin.values)
 
-    data_dict = dict([
-        (key, value) for key,value in zip(list_of_keys,
-                                          list_of_values)
-    ])
+    data_dict = dict([(key, value) for key, value in zip(list_of_keys, list_of_values)])
 
     return data_dict
-

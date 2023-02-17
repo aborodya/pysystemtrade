@@ -1,12 +1,9 @@
 from copy import copy
 from dataclasses import dataclass
 
-from syscore.objects import (
-    arg_not_supplied,
-    missing_order,
-    missing_contract,
-    missing_data,
-)
+from syscore.exceptions import missingContract, missingData
+from syscore.constants import missing_data, arg_not_supplied
+from sysexecution.orders.named_order_objects import missing_order
 
 from sysdata.data_blob import dataBlob
 
@@ -29,7 +26,7 @@ limit_price_from_offside_price = "offside_price"
 sources_of_limit_price = [
     limit_price_from_offside_price,
     limit_price_from_side_price,
-    limit_price_from_offside_price,
+    limit_price_from_input,
 ]
 
 
@@ -49,6 +46,10 @@ class Algo(object):
     @property
     def data(self):
         return self._data
+
+    @property
+    def blocking_algo_requires_management(self) -> bool:
+        return True
 
     @property
     def data_broker(self):
@@ -164,29 +165,25 @@ class Algo(object):
         log = contract_order.log_with_attributes(self.data.log)
 
         # Get the first 'reference' tick
-        reference_tick = (
-            ticker_object.wait_for_valid_bid_and_ask_and_return_current_tick(
-                wait_time_seconds=10
+        try:
+            reference_tick = (
+                ticker_object.wait_for_valid_bid_and_ask_and_return_current_tick(
+                    wait_time_seconds=10
+                )
             )
-        )
-
-        tick_analysis = ticker_object.analyse_for_tick(reference_tick)
-
-        if tick_analysis is missing_data:
+        except missingData:
             log.warn(
                 "Can't get market data for %s so not trading with limit order %s"
                 % (contract_order.instrument_code, str(contract_order))
             )
             return missing_data
 
+        tick_analysis = ticker_object.analyse_for_tick(reference_tick)
+
         ticker_object.clear_and_add_reference_as_first_tick(reference_tick)
 
         # These prices will be used for limit price purposes
         # They are scalars
-        benchmark_side_prices = tick_analysis.side_price
-        offside_price = tick_analysis.offside_price
-        mid_price = tick_analysis.mid_price
-
         collected_prices = benchmarkPriceCollection(
             offside_price=tick_analysis.offside_price,
             side_price=tick_analysis.side_price,
@@ -229,8 +226,9 @@ class Algo(object):
     ) -> float:
         contract = contract_order.futures_contract
 
-        min_tick = self.data_broker.get_min_tick_size_for_contract(contract)
-        if min_tick is missing_contract:
+        try:
+            min_tick = self.data_broker.get_min_tick_size_for_contract(contract)
+        except missingContract:
             log = contract_order.log_with_attributes(self.data.log)
             log.warn(
                 "Couldn't find min tick size for %s, not rounding limit price %f"

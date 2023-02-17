@@ -1,11 +1,11 @@
 import numpy as np
 import pandas as pd
 from sysquant.optimisation.weights import portfolioWeights
-from syscore.pdutils import must_have_item
+from syscore.pandas.pdutils import get_index_of_columns_in_df_with_at_least_one_value
 
 
 def get_must_have_dict_from_data(data: pd.DataFrame) -> dict:
-    must_have_list = must_have_item(data)
+    must_have_list = get_index_of_columns_in_df_with_at_least_one_value(data)
     list_of_asset_names = list(data.columns)
     must_have_dict = dict(
         [
@@ -68,17 +68,17 @@ def clean_list_of_weights(
 
     :returns: list of float
 
-    >>> clean_weights([1.0, np.nan, np.nan],   fraction=1.0)
+    >>> clean_list_of_weights([1.0, np.nan, np.nan], fraction=1.0)
     [0.33333333333333337, 0.33333333333333331, 0.33333333333333331]
-    >>> clean_weights([0.4, 0.6, np.nan],  fraction=1.0)
+    >>> clean_list_of_weights([0.4, 0.6, np.nan],  fraction=1.0)
     [0.26666666666666672, 0.40000000000000002, 0.33333333333333331]
-    >>> clean_weights([0.4, 0.6, np.nan],  fraction=0.5)
+    >>> clean_list_of_weights([0.4, 0.6, np.nan],  fraction=0.5)
     [0.33333333333333337, 0.5, 0.16666666666666666]
-    >>> clean_weights([np.nan, np.nan, 1.0],  must_haves=[False,True,True], fraction=1.0)
+    >>> clean_list_of_weights([np.nan, np.nan, 1.0],  must_haves=[False,True,True], fraction=1.0)
     [0.0, 0.5, 0.5]
-    >>> clean_weights([np.nan, np.nan, np.nan],  must_haves=[False,False,True], fraction=1.0)
+    >>> clean_list_of_weights([np.nan, np.nan, np.nan],  must_haves=[False,False,True], fraction=1.0)
     [0.0, 0.0, 1.0]
-    >>> clean_weights([np.nan, np.nan, np.nan],  must_haves=[False,False,False], fraction=1.0)
+    >>> clean_list_of_weights([np.nan, np.nan, np.nan],  must_haves=[False,False,False], fraction=1.0)
     [0.0, 0.0, 0.0]
     """
     ###

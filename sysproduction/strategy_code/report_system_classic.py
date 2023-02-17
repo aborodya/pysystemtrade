@@ -4,8 +4,9 @@ import datetime
 
 from collections import namedtuple
 
-from syscore.objects import header, table, body_text, missing_data
-from syscore.dateutils import ROOT_BDAYS_INYEAR, from_marker_to_datetime
+from syscore.exceptions import missingData
+from sysproduction.reporting.reporting_functions import table, header, body_text
+from syscore.dateutils import ROOT_BDAYS_INYEAR, from_marker_string_to_datetime
 from sysproduction.data.positions import diagPositions
 
 from sysobjects.production.backtest_storage import interactiveBacktest
@@ -50,32 +51,8 @@ def report_system_classic_no_header_or_footer(
     :param backtest: dataBacktest object populated with a specific backtest
     :return: list of report format type objects
     """
-
-    unweighted_forecasts_df = get_forecast_matrix(
-        backtest, stage_name="forecastScaleCap", method_name="get_capped_forecast"
-    )
-    unweighted_forecasts_df_rounded = unweighted_forecasts_df.round(1)
-    unweighted_forecasts_table = table(
-        "Unweighted forecasts", unweighted_forecasts_df_rounded
-    )
-    format_output.append(unweighted_forecasts_table)
-
-    # Forecast weights
-    forecast_weights_df = get_forecast_matrix_over_code(
-        backtest, stage_name="combForecast", method_name="get_forecast_weights"
-    )
-    forecast_weights_df_as_perc = forecast_weights_df * 100
-    forecast_weights_df_as_perc_rounded = forecast_weights_df_as_perc.round(1)
-    forecast_weights_table = table(
-        "Forecast weights", forecast_weights_df_as_perc_rounded
-    )
-    format_output.append(forecast_weights_table)
-
-    # Weighted forecast
-    weighted_forecasts_df = forecast_weights_df * unweighted_forecasts_df
-    weighted_forecast_rounded = weighted_forecasts_df.round(1)
-    weighted_forecast_table = table("Weighted forecasts", weighted_forecast_rounded)
-    format_output.append(weighted_forecast_table)
+    risk_scaling_str = risk_scaling_string(backtest)
+    format_output.append(body_text(risk_scaling_str))
 
     # Cash target
     cash_target_dict = backtest.system.positionSize.get_vol_target_dict()
@@ -169,6 +146,33 @@ def report_system_classic_no_header_or_footer(
 
     format_output.append(versus_buffers_and_positions_table)
 
+    # Forecast weights
+    forecast_weights_df = get_forecast_matrix_over_code(
+        backtest, stage_name="combForecast", method_name="get_forecast_weights"
+    )
+    forecast_weights_df_as_perc = forecast_weights_df * 100
+    forecast_weights_df_as_perc_rounded = forecast_weights_df_as_perc.round(1)
+    forecast_weights_table = table(
+        "Forecast weights", forecast_weights_df_as_perc_rounded
+    )
+    format_output.append(forecast_weights_table)
+
+    unweighted_forecasts_df = get_forecast_matrix(
+        backtest, stage_name="forecastScaleCap", method_name="get_capped_forecast"
+    )
+
+    # Weighted forecast
+    weighted_forecasts_df = forecast_weights_df * unweighted_forecasts_df
+    weighted_forecast_rounded = weighted_forecasts_df.round(1)
+    weighted_forecast_table = table("Weighted forecasts", weighted_forecast_rounded)
+    format_output.append(weighted_forecast_table)
+
+    unweighted_forecasts_df_rounded = unweighted_forecasts_df.round(1)
+    unweighted_forecasts_table = table(
+        "Unweighted forecasts", unweighted_forecasts_df_rounded
+    )
+    format_output.append(unweighted_forecasts_table)
+
     return format_output
 
 
@@ -179,7 +183,7 @@ def get_forecast_matrix(
     trading_rules = data_backtest.system.rules.trading_rules()
     trading_rule_names = list(trading_rules.keys())
 
-    datetime_cutoff = from_marker_to_datetime(data_backtest.timestamp)
+    datetime_cutoff = from_marker_string_to_datetime(data_backtest.timestamp)
 
     value_dict = {}
     for rule_name in trading_rule_names:
@@ -202,7 +206,7 @@ def get_forecast_matrix_over_code(
     trading_rules = data_backtest.system.rules.trading_rules()
     trading_rule_names = list(trading_rules.keys())
 
-    datetime_cutoff = from_marker_to_datetime(data_backtest.timestamp)
+    datetime_cutoff = from_marker_string_to_datetime(data_backtest.timestamp)
 
     value_dict = {}
     for instrument_code in instrument_codes:
@@ -368,7 +372,7 @@ def get_stage_breakdown_over_codes(backtest: interactiveBacktest, method_list: l
 
 def get_list_of_values_by_instrument_for_config(backtest, config_for_method):
     instrument_codes = backtest.system.get_instrument_list()
-    datetime_cutoff = from_marker_to_datetime(backtest.timestamp)
+    datetime_cutoff = from_marker_string_to_datetime(backtest.timestamp)
 
     stage = getattr(backtest.system, config_for_method.stage_name)
     method = getattr(stage, config_for_method.method_name)
@@ -451,13 +455,14 @@ def get_position_for_instrument_code_at_timestamp(data_backtest, data, instrumen
         strategy_name=strategy_name, instrument_code=instrument_code
     )
 
-    positions_over_time = diag_positions.get_position_df_for_instrument_strategy(
-        instrument_strategy
-    )
-    if positions_over_time is missing_data:
+    try:
+        positions_over_time = diag_positions.get_position_df_for_instrument_strategy(
+            instrument_strategy
+        )
+    except missingData:
         return np.nan
 
-    datetime_cutoff = from_marker_to_datetime(data_backtest.timestamp)
+    datetime_cutoff = from_marker_string_to_datetime(data_backtest.timestamp)
     positions_over_time_ffill = positions_over_time.ffill()
     positions_before_cutoff = positions_over_time_ffill[:datetime_cutoff]
 
@@ -490,3 +495,50 @@ def calc_position_diags(portfolio_positions_df, subystem_positions_df):
     average_position = idm * instr_weight * vol_scalar
 
     return average_position
+
+
+def risk_scaling_string(backtest) -> str:
+    backtest_system_portfolio_stage = backtest.system.portfolio
+    normal_risk_final = (
+        backtest_system_portfolio_stage.get_portfolio_risk_for_original_positions().iloc[
+            -1
+        ]
+        * 100.0
+    )
+    shocked_vol_risk_final = (
+        backtest_system_portfolio_stage.get_portfolio_risk_for_original_positions_with_shocked_vol().iloc[
+            -1
+        ]
+        * 100.0
+    )
+    sum_abs_risk_final = (
+        backtest_system_portfolio_stage.get_sum_annualised_risk_for_original_positions().iloc[
+            -1
+        ]
+        * 100.0
+    )
+    leverage_final = (
+        backtest_system_portfolio_stage.get_leverage_for_original_position().iloc[-1]
+    )
+    percentage_vol_target = backtest_system_portfolio_stage.get_percentage_vol_target()
+    risk_scalar_final = backtest_system_portfolio_stage.get_risk_scalar().iloc[-1]
+    risk_overlay_config = (
+        backtest_system_portfolio_stage.config.get_element_or_arg_not_supplied(
+            "risk_overlay"
+        )
+    )
+
+    scaling_str = (
+        "Risk overlay \n Config %s \n Percentage vol target %.1f \n Normal risk %.1f Shocked risk %.1f \n Sum abs risk %.1f Leverage %.2f \n Risk scalar %.2f"
+        % (
+            str(risk_overlay_config),
+            percentage_vol_target,
+            normal_risk_final,
+            shocked_vol_risk_final,
+            sum_abs_risk_final,
+            leverage_final,
+            risk_scalar_final,
+        )
+    )
+
+    return scaling_str

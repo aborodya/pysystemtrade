@@ -7,19 +7,22 @@ These are 'virtual' orders, because they are per instrument. We translate that t
 
 Desired virtual orders have to be labelled with the desired type: limit, market,best-execution
 """
+from copy import copy
+from typing import List
 from dataclasses import dataclass
 
-from syscore.objects import missing_data
+from syscore.constants import missing_data, arg_not_supplied
 from sysdata.data_blob import dataBlob
 
 from sysexecution.orders.instrument_orders import instrumentOrder, best_order_type
 from sysexecution.orders.list_of_orders import listOfOrders
 from sysexecution.strategies.strategy_order_handling import orderGeneratorForStrategy
-
 from sysobjects.production.tradeable_object import instrumentStrategy
 from sysobjects.production.optimal_positions import (
     optimalPositionWithDynamicCalculations,
 )
+from sysquant.estimators.correlations import correlationEstimate
+from sysobjects.production.position_limits import NO_LIMIT
 from sysobjects.production.override import (
     Override,
     CLOSE_OVERRIDE,
@@ -31,12 +34,14 @@ from sysproduction.data.controls import dataPositionLimits
 from sysproduction.data.positions import dataOptimalPositions
 from sysproduction.data.controls import diagOverrides
 
-from sysproduction.reporting.data.risk_metrics import (
+from sysproduction.data.capital import capital_for_strategy
+from sysproduction.data.risk import (
+    get_correlation_matrix_for_instrument_returns,
+    get_annualised_stdev_perc_of_instruments,
+    covariance_from_stdev_and_correlation,
     get_perc_of_strategy_capital_for_instrument_per_contract,
-    capital_for_strategy,
-    get_covariance_matrix_for_instrument_returns,
 )
-from sysproduction.reporting.data.costs import get_cash_cost_in_base_for_instrument
+from sysproduction.data.prices import get_cash_cost_in_base_for_instrument
 
 from sysquant.estimators.covariance import covarianceEstimate
 from sysquant.estimators.mean_estimator import meanEstimates
@@ -49,6 +54,11 @@ from systems.provided.dynamic_small_system_optimise.optimisation import (
 from systems.provided.dynamic_small_system_optimise.buffering import (
     speedControlForDynamicOpt,
 )
+from systems.provided.dynamic_small_system_optimise.optimised_positions_stage import (
+    calculate_cost_per_notional_weight_as_proportion_of_capital,
+)
+
+ARBITRARILY_LARGE_CONTRACT_LIMIT = 999999999
 
 
 class orderGeneratorForDynamicPositions(orderGeneratorForStrategy):
@@ -236,16 +246,10 @@ def get_data_for_objective_instance(
 
     data.log.msg("Getting maximum positions")
     maximum_position_contracts = get_maximum_position_contracts(
-        data,
-        strategy_name=strategy_name,
-        previous_positions=previous_positions_as_weights_object,
-        list_of_instruments=list_of_instruments,
+        data, strategy_name=strategy_name, list_of_instruments=list_of_instruments
     )
 
     data.log.msg("Getting covariance matrix")
-    covariance_matrix = get_covariance_matrix_for_instrument_returns(
-        data, list_of_instruments=list_of_instruments
-    )
 
     data.log.msg("Getting per contract values")
     per_contract_value = get_per_contract_values(
@@ -254,11 +258,18 @@ def get_data_for_objective_instance(
 
     data.log.msg("Getting costs")
     costs = calculate_costs_per_portfolio_weight(
-        data, strategy_name=strategy_name, list_of_instruments=list_of_instruments
+        data,
+        per_contract_value=per_contract_value,
+        strategy_name=strategy_name,
+        list_of_instruments=list_of_instruments,
     )
 
     constraints = get_constraints(
         data, strategy_name=strategy_name, list_of_instruments=list_of_instruments
+    )
+
+    covariance_matrix = get_covariance_matrix_for_instrument_returns_for_optimisation(
+        data, list_of_instruments=list_of_instruments
     )
 
     speed_control = get_speed_control(data)
@@ -281,7 +292,7 @@ def get_data_for_objective_instance(
 
 
 def get_maximum_position_contracts(
-    data, strategy_name: str, previous_positions: dict, list_of_instruments: list
+    data, strategy_name: str, list_of_instruments: list
 ) -> portfolioWeights:
 
     maximum_position_contracts = dict(
@@ -293,7 +304,6 @@ def get_maximum_position_contracts(
                     instrument_strategy=instrumentStrategy(
                         strategy_name=strategy_name, instrument_code=instrument_code
                     ),
-                    previous_position=previous_positions.get(instrument_code, 0),
                 ),
             )
             for instrument_code in list_of_instruments
@@ -304,7 +314,7 @@ def get_maximum_position_contracts(
 
 
 def get_maximum_position_contracts_for_instrument_strategy(
-    data: dataBlob, instrument_strategy: instrumentStrategy, previous_position: int = 0
+    data: dataBlob, instrument_strategy: instrumentStrategy
 ) -> int:
 
     override = get_override_for_instrument_strategy(data, instrument_strategy)
@@ -312,11 +322,14 @@ def get_maximum_position_contracts_for_instrument_strategy(
         return 0
 
     position_limit_data = dataPositionLimits(data)
-    spare = int(
-        position_limit_data.get_spare_checking_all_position_limits(instrument_strategy)
+    maximum = (
+        position_limit_data.get_maximum_position_contracts_for_instrument_strategy(
+            instrument_strategy
+        )
     )
 
-    maximum = int(spare) + abs(previous_position)
+    if maximum is NO_LIMIT:
+        return ARBITRARILY_LARGE_CONTRACT_LIMIT
 
     return maximum
 
@@ -341,21 +354,55 @@ def get_per_contract_values(
 
 
 def calculate_costs_per_portfolio_weight(
-    data: dataBlob, strategy_name: str, list_of_instruments: list
+    data: dataBlob,
+    per_contract_value: meanEstimates,
+    strategy_name: str,
+    list_of_instruments: list,
 ) -> meanEstimates:
 
-    capital = capital_for_strategy(data, strategy_name=strategy_name)
     costs = meanEstimates(
         [
             (
                 instrument_code,
-                get_cash_cost_in_base_for_instrument(data, instrument_code) / capital,
+                get_cost_per_notional_weight_as_proportion_of_capital(
+                    data=data,
+                    per_contract_value=per_contract_value,
+                    strategy_name=strategy_name,
+                    instrument_code=instrument_code,
+                ),
             )
             for instrument_code in list_of_instruments
         ]
     )
 
     return costs
+
+
+def get_cost_per_notional_weight_as_proportion_of_capital(
+    data: dataBlob,
+    per_contract_value: meanEstimates,
+    strategy_name: str,
+    instrument_code: str,
+) -> float:
+
+    capital = capital_for_strategy(data, strategy_name=strategy_name)
+
+    cost_per_contract = get_cash_cost_in_base_for_instrument(
+        data=data, instrument_code=instrument_code
+    )
+    cost_multiplier = 1.0  #### applied elsewhere
+    notional_value_per_contract_as_proportion_of_capital = per_contract_value[
+        instrument_code
+    ]
+
+    cost_per_notional_weight_as_proportion_of_capital = calculate_cost_per_notional_weight_as_proportion_of_capital(
+        cost_per_contract=cost_per_contract,
+        cost_multiplier=cost_multiplier,
+        notional_value_per_contract_as_proportion_of_capital=notional_value_per_contract_as_proportion_of_capital,
+        capital=capital,
+    )
+
+    return cost_per_notional_weight_as_proportion_of_capital
 
 
 def get_constraints(data, strategy_name: str, list_of_instruments: list):
@@ -423,21 +470,65 @@ def get_override_for_instrument_strategy(
     return override
 
 
+def get_covariance_matrix_for_instrument_returns_for_optimisation(
+    data: dataBlob, list_of_instruments: list
+) -> covarianceEstimate:
+
+    corr_matrix = get_correlation_matrix_for_instrument_returns(
+        data, list_of_instruments
+    )
+
+    stdev_estimate = get_annualised_stdev_perc_of_instruments(
+        data, instrument_list=list_of_instruments
+    )
+    covariance = covariance_from_stdev_and_correlation(
+        stdev_estimate=stdev_estimate, correlation_estimate=corr_matrix
+    )
+
+    return covariance
+
+
+def get_correlation_matrix_with_shrinkage(
+    data, list_of_instruments: list
+) -> correlationEstimate:
+    # FIXME feels like this ought to be done inside the DO code as violates DRY
+    system_config = get_config_parameters(data)
+    shrinkage_corr = system_config["shrink_instrument_returns_correlation"]
+    corr_matrix = get_correlation_matrix_for_instrument_returns(
+        data, list_of_instruments
+    )
+
+    corr_matrix_shrunk = copy(
+        corr_matrix.shrink_to_offdiag(shrinkage_corr=shrinkage_corr, offdiag=0.0)
+    )
+
+    return corr_matrix_shrunk
+
+
 def get_speed_control(data):
     system_config = get_config_parameters(data)
     trade_shadow_cost = system_config.get("shadow_cost", missing_data)
     tracking_error_buffer = system_config.get("tracking_error_buffer", missing_data)
+    cost_multiplier = system_config.get("cost_multiplier", missing_data)
 
-    if (tracking_error_buffer is missing_data) or (trade_shadow_cost is missing_data):
+    if (
+        (tracking_error_buffer is missing_data)
+        or (trade_shadow_cost is missing_data)
+        or (cost_multiplier is missing_data)
+    ):
         raise Exception(
-            "config.small_system doesn't include buffer or shadow cost: you've probably messed up your private_config"
+            "config.small_system doesn't include buffer or shadow cost or cost_multiplier: you've probably messed up your private_config"
         )
 
-    data.log.msg("Shadow cost %f" % trade_shadow_cost)
+    data.log.msg(
+        "Shadow cost %f multiply by cost multiplier %f) = %f"
+        % (trade_shadow_cost, cost_multiplier, trade_shadow_cost * cost_multiplier)
+    )
     data.log.msg("Tracking error buffer %f" % tracking_error_buffer)
 
     speed_control = speedControlForDynamicOpt(
-        trade_shadow_cost=trade_shadow_cost, tracking_error_buffer=tracking_error_buffer
+        trade_shadow_cost=trade_shadow_cost * cost_multiplier,
+        tracking_error_buffer=tracking_error_buffer,
     )
 
     return speed_control
@@ -484,7 +575,7 @@ def get_optimised_positions_data_dict_given_optimisation(
     optimised_position_weights = get_weights_given_positions(
         optimised_positions, per_contract_value=data_for_objective.per_contract_value
     )
-    instrument_list = list(optimised_position_weights.keys())
+    instrument_list: List[str] = objective_function.keys_with_valid_data
 
     minima_weights = portfolioWeights.from_weights_and_keys(
         list_of_keys=instrument_list,

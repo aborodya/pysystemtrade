@@ -33,6 +33,9 @@ ib_ipaddress: 127.0.0.1
 ib_port: 4001
 ib_idoffset: 100
 #
+# Broker class list resolution function
+broker_factory_func: 'sysbrokers.broker_factory.get_ib_class_list'
+#
 # Mongo DB
 mongo_host: 127.0.0.1
 mongo_db: 'production'
@@ -43,7 +46,15 @@ mongo_port: 27017
 # Needs to be consistent with what you are using in crontab
 echo_extension: '.txt'
 # Spike checker
-max_price_spike: 8
+max_price_spike: 8.0
+# Default get_GMT_offset_hours
+GMT_offset_hours: 0
+# Behaviour of price filtering
+ignore_future_prices: True
+ignore_prices_with_zero_volumes_intraday: True
+ignore_prices_with_zero_volumes_daily: False
+ignore_zero_prices: True
+ignore_negative_prices: False
 #
 # Price frequency (we collect daily data, and separately this frequency
 intraday_frequency: H
@@ -165,6 +176,7 @@ forecast_weight_estimate:
 percentage_vol_target: 16.0
 notional_trading_capital: 1000000
 base_currency: "USD"
+# other options are full_compounding and half_compounding, but see syscore.capital.py
 capital_multiplier:
    func: syscore.capital.fixed_capital
 #
@@ -179,7 +191,7 @@ instrument_correlation_estimate:
    frequency: "W"
    date_method: "expanding"
    using_exponent: True
-   ew_lookback: 250
+   ew_lookback: 25
    min_periods: 20
    cleaning: True
    rollyears: 20
@@ -232,19 +244,20 @@ instrument_weight_estimate:
      min_periods: 5
 #
 # buffering / position inertia
-buffer_method: position
+buffer_method: forecast
 buffer_size: 0.10
-buffer_trade_to_edge: False
+buffer_trade_to_edge: True
 # costs and accounting
 use_SR_costs: False
 vol_normalise_currency_costs: True
+multiply_roll_costs_by: 0.5
 #
-# risk overlay - make thi
-risk_overlay:
-  max_risk_fraction_normal_risk: 99999
-  max_risk_fraction_stdev_risk: 99999
-  max_risk_limit_sum_abs_risk: 99999
-  max_risk_leverage: 99999
+# risk overlay - make these numbers and uncomment
+#risk_overlay:
+#  max_risk_fraction_normal_risk: 99999
+#  max_risk_fraction_stdev_risk: 99999
+#  max_risk_limit_sum_abs_risk: 99999
+#  max_risk_leverage: 99999
 #
 instrument_returns_correlation:
   func: sysquant.estimators.correlation_over_time.correlation_over_time_for_returns
@@ -259,13 +272,13 @@ instrument_returns_correlation:
   rollyears: 5
   floor_at_zero: False
   forward_fill_price_index: True
-  clip: 0.90
-  shrinkage_parameter: 0.5
+  clip: 0.99
 # small system optimisation
 small_system:
-  shadow_cost: 250
+  shadow_cost: 50
   cost_multiplier: 1.0
   tracking_error_buffer: 0.0125
+  shrink_instrument_returns_correlation: 0.5
 #
 # duplicated/excluded instruments are ignored in backtests
 # we still collect price data for them in production, do rolls etc
@@ -274,77 +287,14 @@ small_system:
 # we use the 'include section to match up for reporting when deciding which to trade
 # Be careful when swapping between instruments, a bit dangerous if a position is held...
 # You can override this by modifying the backtest config .yaml file used in either sim or production
+#
+# THe following example shows how you would select one instrument out of a choice of 3
+#
 duplicate_instruments:
   include:
-    aud: 'AUD'
-    cnh: 'CNH'
-    copper: 'COPPER'
-    corn: 'CORN'
-    crude: 'CRUDE_W_mini'
-    ether: 'ETHEREUM'
-    eu-chem: 'EU-CHEM'
-    eu-finance: 'EU-FINANCE'
-    eu-food: 'EU-FOOD'
-    eu-health: 'EU-HEALTH'
-    eu-insure: 'EU-INSURE'
-    eu-media: 'EU-MEDIA'
-    eu-oil: 'EU-OIL'
-    eu-retail: 'EU-RETAIL'
-    eu-tech: 'EU-TECH'
-    eu-utils: 'EU-UTILS'
-    gas_us: 'GAS_US_mini'
-    gasoiline: 'GASOILINE'
-    gold: 'GOLD_micro'
-    heatoil: 'HEATOIL'
-    inr: 'INR'
-    jgb: 'JGB'
-    jpy: 'JPY'
-    kospi: 'KOSPI'
-    krwusd: 'KRWUSD'
-    nasdaq: 'NASDAQ_micro'
-    nikkei: 'NIKKEI'
-    r1000: 'R1000'
-    silver: 'SILVER'
-    soybean: 'SOYBEAN'
-    sp500: 'SP500_micro'
-    twd: 'TWD'
-    vix: 'VIX'
-    wheat: 'WHEAT'
+    things: 'thing_we_want'
   exclude:
-    aud: 'AUD-SGX'
-    cnh: 'CNH-onshore'
-    copper: 'COPPER-mini'
-    corn: 'CORN_mini'
-    crude: 'CRUDE_W'
-    ether: 'ETHER-micro'
-    eu-chem: 'EU-DJ-CHEM'
-    eu-finance: 'EU-DJ-FINANCE'
-    eu-food: 'EU-DJ-FOOD'
-    eu-health: 'EU-DJ-HEALTH'
-    eu-insure: 'EU-DJ-INSURE'
-    eu-media: 'EU-DJ-MEDIA'
-    eu-oil: 'EU-DJ-OIL'
-    eu-retail: 'EU-DJ-RETAIL'
-    eu-tech: 'EU-DJ-TECH'
-    eu-utils: 'EU-DJ-UTIL'
-    gas_us: 'GAS_US'
-    gasoiline: 'GASOILINE_mini'
-    gold: 'GOLD'
-    heatoil: 'HEATOIL_mini'
-    inr: ['INR-mini','INR-SGX']
-    jgb: ['JGB_mini', 'JGB-SGX-mini']
-    jpy: ['JPY_micro','JPY-SGX-TITAN', 'JPY-SGX']
-    kospi: 'KOSPI_mini'
-    krwusd: 'KRWUSD_mini'
-    nasdaq: 'NASDAQ'
-    nikkei: 'NIKKEI-JPY'
-    r1000: 'R1000mini'
-    silver: 'SILVER_mini'
-    soybean: 'SOYBEAN_mini'
-    sp500: 'SP500'
-    twd: 'TWD-mini'
-    vix: 'VIX_mini'
-    wheat: 'WHEAT_mini'
+    things: ['bad_thing', 'Another_thing']
 exclude_instrument_lists:
   # ignore_instruments are ignored in backtests
   # we still collect price data for them in production, do rolls etc
@@ -356,10 +306,7 @@ exclude_instrument_lists:
   #
   # REVIEW REGULARLY AND CHECK THESE INSTRUMENTS AREN'T BETTER ELSEWHERE...
   ignore_instruments:
-    - 'EURIBOR'
-    - 'SGX'
-    - 'BRENT'
-    - 'CLP'
+    - 'EXAMPLE'
   #
   # Here we put stuff we can't trade, but for which we still want to bring in prices in sim
   # For the dynamically optimised strategy this list will be used in sim as 'don't trade'
@@ -368,17 +315,7 @@ exclude_instrument_lists:
   # NOTE: This will be regionally biased, you will probably want to override this in private_config.yaml
   #
   trading_restrictions:
-    - US-DISCRETE
-    - US-ENERGY
-    - US-FINANCE
-    - US-HEALTH
-    - US-INDUSTRY
-    - US-MATERIAL
-    - US-PROPERTY
-    - US-REALESTATE
-    - US-STAPLES
-    - US-TECH
-    - US-UTILS
+    - RESTRICTED_EXAMPLE
   # These are markets that are too expensive or illiquid to actually trade
   # For the dynamically optimised strategy this list will be used in sim as 'don't trade'
   # For static strategies, you will probably want to set these to zero instrument weights
@@ -386,73 +323,4 @@ exclude_instrument_lists:
   # Run interactive controls to get a list of suggested markets here
   # To override this list, change in sim .yaml config (sim) and private_config.yaml (production)
   bad_markets:
-    - ALUMINIUM
-    - BBCOMM
-    - BEL20
-    - BOVESPA
-    - BUTTER
-    - CH10
-    - CHEESE
-    - CNH-onshore
-    - COPPER-mini
-    - CZK
-    - DJSTX-SMALL
-    - EDOLLAR
-    - ETHANOL
-    - ETHER-micro
-    - ETHEREUM
-    - EU-BANKS
-    - EU-CHEM
-    - EU-CONSTRUCTION
-    - EU-DJ-OIL
-    - EU-DJ-TECH
-    - EU-DJ-TELECOM
-    - EU-DJ-UTIL
-    - EU-FOOD
-    - EU-HOUSE
-    - EU-INSURE
-    - EU-MEDIA
-    - EU-MID
-    - EU-REALESTATE
-    - EU-RETAIL
-    - EU-UTILS
-    - EURCHF
-    - EURIBOR
-    - EUROSTX-LARGE
-    - EUROSTX-SMALL
-    - EUROSTX200-LARGE
-    - FTSEINDO
-    - IRS
-    - JGB
-    - JGB-SGX-mini
-    - JP-REALESTATE
-    - KOSPI_mini
-    - KR3
-    - KRWUSD
-    - LUMBER
-    - MILK
-    - MILKDRY
-    - MILKWET
-    - NOK
-    - OATIES
-    - OMX
-    - R1000
-    - RICE
-    - SEK
-    - SGX
-    - SHATZ
-    - SMI-MID
-    - US2
-    - US-DISCRETE
-    - US-ENERGY
-    - US-FINANCE
-    - US-HEALTH
-    - US-INDUSTRY
-    - US-MATERIAL
-    - US-PROPERTY
-    - US-REALESTATE
-    - US-STAPLES
-    - US-TECH
-    - US-UTILS
-    - USIRS5
-    - VNKI
+    - BAD_EXAMPLE

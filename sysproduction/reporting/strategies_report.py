@@ -5,7 +5,7 @@ A strategy report is highly specific to a strategy, and will delve into the inte
 
 """
 
-from syscore.objects import arg_not_supplied
+from syscore.constants import arg_not_supplied
 
 from sysdata.data_blob import dataBlob
 from sysproduction.data.backtest import dataBacktest
@@ -44,11 +44,14 @@ def get_strategies_report_output(data, list_of_strategies, timestamp=arg_not_sup
 
     formatted_output = []
     for strategy_name in list_of_strategies:
-        strategy_format_output_list = get_output_for_single_strategy(
-            data, strategy_name, timestamp=timestamp
-        )
-        for output_item in strategy_format_output_list:
-            formatted_output.append(output_item)
+        try:
+            strategy_format_output_list = get_output_for_single_strategy(
+                data, strategy_name, timestamp=timestamp
+            )
+            for output_item in strategy_format_output_list:
+                formatted_output.append(output_item)
+        except FileNotFoundError as e:
+            print(e)
 
     return formatted_output
 
@@ -66,3 +69,7 @@ def get_output_for_single_strategy(data, strategy_name, timestamp=arg_not_suppli
     strategy_format_output_list = strategy_reporting_function(data, backtest)
 
     return strategy_format_output_list
+
+
+if __name__ == "__main__":
+    strategy_report()

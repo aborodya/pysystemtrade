@@ -1,10 +1,12 @@
 import pandas as pd
-from sysdata.production.capital import capitalData
-from syscore.fileutils import get_filename_for_package
-from syscore.objects import arg_not_supplied
+from sysdata.production.new_capital import capitalData
+from syscore.fileutils import resolve_path_and_filename_for_package
+from syscore.constants import arg_not_supplied
 from syslogdiag.log_to_screen import logtoscreen
 
 DATE_INDEX_NAME = "DATETIME"
+
+## ONLY USED FOR BACKUPS
 
 
 class csvCapitalData(capitalData):
@@ -17,6 +19,8 @@ class csvCapitalData(capitalData):
 
         self._datapath = datapath
 
-    def write_df_of_all_capital(self, capital_data):
-        filename = get_filename_for_package(self._datapath, "%s.csv" % ("capital_data"))
+    def write_backup_df_of_all_capital(self, capital_data):
+        filename = resolve_path_and_filename_for_package(
+            self._datapath, "%s.csv" % ("capital_data")
+        )
         capital_data.to_csv(filename, index_label=DATE_INDEX_NAME)

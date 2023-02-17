@@ -1,12 +1,17 @@
+from typing import Union
 import datetime
 
 from dataclasses import dataclass
 
-from syscore.objects import arg_not_supplied, missing_contract
+from syscore.constants import arg_not_supplied
 
 from syslogdiag.logger import logger
 
-from sysobjects.contract_dates_and_expiries import contractDate, expiryDate
+from sysobjects.contract_dates_and_expiries import (
+    contractDate,
+    expiryDate,
+    listOfContractDateStr,
+)
 from sysobjects.instruments import futuresInstrument
 
 
@@ -57,8 +62,8 @@ class futuresContract(object):
 
     def __init__(
         self,
-        instrument_object: futuresInstrument,
-        contract_date_object: contractDate,
+        instrument_object: Union[str, futuresInstrument],
+        contract_date_object: Union[str, contractDate],
         parameter_object: parametersForFuturesContract = arg_not_supplied,
         simple: bool = False,
     ):
@@ -84,14 +89,6 @@ class futuresContract(object):
         self._instrument = instrument_object
         self._contract_date = contract_date_object
         self._params = parameter_object
-
-    @classmethod
-    def from_two_strings(futuresContract, instrument_code: str, contract_date_str: str):
-
-        instrument_object = futuresInstrument(instrument_code)
-        contract_date = contractDate(contract_date_str, simple=True)
-
-        return futuresContract(instrument_object, contract_date, simple=True)
 
     def specific_log(self, log):
         new_log = log.setup(
@@ -218,7 +215,6 @@ class futuresContract(object):
         timedelta = expiry_date - date_now
         return timedelta.days
 
-
     def update_single_expiry_date(self, new_expiry_date: expiryDate):
         self.contract_date.update_single_expiry_date(new_expiry_date)
 
@@ -242,11 +238,7 @@ class futuresContract(object):
         ]
 
         for contract_index, expiry_date in enumerate(new_expiries):
-            if expiry_date is missing_contract:
-                ## whole thing is buggered
-                return missing_contract
-            else:
-                self.update_nth_expiry_date(contract_index, expiry_date)
+            self.update_nth_expiry_date(contract_index, expiry_date)
 
         return self
 
@@ -353,7 +345,7 @@ class listOfFuturesContracts(list):
 
         return listOfFuturesContracts(contracts_currently_sampling)
 
-    def list_of_dates(self) -> list:
+    def list_of_dates(self) -> listOfContractDateStr:
         # Return list of contract_date identifiers
         contract_dates = [contract.date_str for contract in self]
         return contract_dates

@@ -1,26 +1,40 @@
 from dataclasses import dataclass
+from copy import copy
 import numpy as np
 import pandas as pd
 
-from syscore.interactive import (
-    get_and_convert,
-    run_interactive_menu,
-    print_menu_and_get_response,
+from syscore.interactive.input import (
+    get_input_from_user_and_convert_to_type,
+    true_if_answer_is_yes,
 )
-from syscore.algos import magnitude
-from syscore.pdutils import set_pd_print_options
-from syscore.dateutils import CALENDAR_DAYS_IN_YEAR
-from syscore.objects import missing_data, named_object
+from syscore.interactive.menus import (
+    interactiveMenu,
+    print_menu_and_get_desired_option_index,
+)
+from syscore.interactive.display import (
+    calculate_multiplication_factor_for_nice_repr_of_value,
+    set_pd_print_options,
+)
+from syscore.dateutils import CALENDAR_DAYS_IN_YEAR, DAILY_PRICE_FREQ
+from syscore.genutils import round_significant_figures
+
+from sysinit.futures.repocsv_instrument_config import (
+    copy_instrument_config_from_csv_to_mongo,
+)
+from sysinit.futures.safely_modify_roll_parameters import safely_modify_roll_parameters
+from sysinit.futures.roll_parameters_csv_mongo import (
+    copy_roll_parameters_from_csv_to_mongo,
+)
 
 from sysdata.data_blob import dataBlob
-from sysdata.config.production_config import get_production_config
-from sysdata.config.instruments import generate_matching_duplicate_dict
+from sysobjects.contracts import futuresContract
 from sysobjects.production.override import override_dict, Override
 from sysobjects.production.tradeable_object import instrumentStrategy
 
 from sysproduction.backup_arctic_to_csv import (
     get_data_and_create_csv_directories,
     backup_instrument_data,
+    backup_roll_parameters,
 )
 from sysproduction.data.controls import (
     diagOverrides,
@@ -29,20 +43,31 @@ from sysproduction.data.controls import (
     dataPositionLimits,
     dataBrokerClientIDs,
 )
+from sysproduction.data.broker import dataBroker
+from sysproduction.data.instruments import diagInstruments
+from sysproduction.data.contracts import dataContracts
 from sysproduction.data.control_process import dataControlProcess, diagControlProcess
 from sysproduction.data.prices import (
     get_valid_instrument_code_from_user,
     get_list_of_instruments,
+    diagPrices,
+    updatePrices,
 )
 from sysproduction.data.strategies import get_valid_strategy_name_from_user
 from sysproduction.data.instruments import dataInstruments
-from sysproduction.reporting.data.risk_metrics import get_risk_data_for_instrument
-
+from sysproduction.reporting.data.risk import get_risk_data_for_instrument
+from sysproduction.reporting.data.volume import (
+    get_best_average_daily_volume_for_instrument,
+)
 
 from sysproduction.reporting.api import reportingApi
 
 # could get from config, but might be different by system
-MAX_VS_AVERAGE_FORECAST = 2.0
+from sysproduction.reporting.data.constants import (
+    MAX_VS_AVERAGE_FORECAST,
+    RISK_TARGET_ASSUMED,
+    MAX_PROPORTION_OF_VOLUME,
+)
 
 
 @dataclass()
@@ -52,28 +77,18 @@ class parametersForAutoPopulation:
     notional_risk_target: float
     approx_IDM: float
     notional_instrument_weight: float
+    max_proportion_risk_one_contract: float
+    max_proportion_of_volume: float
 
 
 def interactive_controls():
     set_pd_print_options()
     with dataBlob(log_name="Interactive-Controls") as data:
-        menu = run_interactive_menu(
-            top_level_menu_of_options,
-            nested_menu_of_options,
-            exit_option=-1,
-            another_menu=-2,
+        set_pd_print_options()
+        menu = interactiveMenu(
+            top_level_menu_of_options, nested_menu_of_options, dict_of_functions, data
         )
-    still_running = True
-    while still_running:
-        option_chosen = menu.propose_options_and_get_input()
-        if option_chosen == -1:
-            print("FINISHED")
-            return None
-        if option_chosen == -2:
-            continue
-
-        method_chosen = dict_of_functions[option_chosen]
-        method_chosen(data)
+        menu.run_menu()
 
 
 top_level_menu_of_options = {
@@ -83,6 +98,7 @@ top_level_menu_of_options = {
     3: "Broker client IDS",
     4: "Process control and monitoring",
     5: "Update configuration",
+    6: "Deletion",
 }
 
 nested_menu_of_options = {
@@ -113,15 +129,20 @@ nested_menu_of_options = {
         40: "View process controls and status",
         41: "Change status of process control (STOP/GO/NO RUN)",
         42: "Global status change  (STOP/GO/NO RUN)",
-        43: "Mark process as finished",
-        44: "Mark all dead processes as finished",
+        43: "Mark process as close",
+        44: "Mark all dead processes as close",
         45: "View process configuration (set in YAML, cannot change here)",
     },
     5: {
         50: "Auto update spread cost configuration based on sampling and trades",
-        51: "Suggest 'bad' markets (illiquid or costly)",
-        52: "Suggest which duplicate market to use",
+        51: "Copy instrument configuration from DB to .csv",
+        52: "Copy instrument configuration from .csv to DB",
+        53: "Copy roll parameters config from DB to .csv",
+        54: "Copy roll parameters config from .csv to DB",
+        55: "Safe modify of roll parameters configuration",
+        56: "Check price multipliers are consistent",
     },
+    6: {60: "Delete instrument from price tables"},
 }
 
 
@@ -137,10 +158,10 @@ def view_trade_limits(data):
 def change_limit_for_instrument(data):
     trade_limits = dataTradeLimits(data)
     instrument_code = get_valid_instrument_code_from_user(data)
-    period_days = get_and_convert(
+    period_days = get_input_from_user_and_convert_to_type(
         "Period of days?", type_expected=int, allow_default=True, default_value=1
     )
-    new_limit = get_and_convert(
+    new_limit = get_input_from_user_and_convert_to_type(
         "Limit (in contracts?)", type_expected=int, allow_default=False
     )
     ans = input(
@@ -155,7 +176,7 @@ def change_limit_for_instrument(data):
 def reset_limit_for_instrument(data):
     trade_limits = dataTradeLimits(data)
     instrument_code = get_valid_instrument_code_from_user(data)
-    period_days = get_and_convert(
+    period_days = get_input_from_user_and_convert_to_type(
         "Period of days?", type_expected=int, allow_default=True, default_value=1
     )
     ans = input("Reset means trade 'clock' will restart. Are you sure? (y/other)")
@@ -174,10 +195,10 @@ def change_limit_for_instrument_strategy(data):
     trade_limits = dataTradeLimits(data)
     instrument_code = get_valid_instrument_code_from_user(data)
     strategy_name = get_valid_strategy_name_from_user(data)
-    period_days = get_and_convert(
+    period_days = get_input_from_user_and_convert_to_type(
         "Period of days?", type_expected=int, allow_default=True, default_value=1
     )
-    new_limit = get_and_convert(
+    new_limit = get_input_from_user_and_convert_to_type(
         "Limit (in contracts?)", type_expected=int, allow_default=False
     )
 
@@ -198,7 +219,7 @@ def change_limit_for_instrument_strategy(data):
 def reset_limit_for_instrument_strategy(data):
     trade_limits = dataTradeLimits(data)
     instrument_code = get_valid_instrument_code_from_user(data)
-    period_days = get_and_convert(
+    period_days = get_input_from_user_and_convert_to_type(
         "Period of days?", type_expected=int, allow_default=True, default_value=1
     )
     strategy_name = get_valid_strategy_name_from_user(data=data, source="positions")
@@ -213,31 +234,32 @@ def reset_limit_for_instrument_strategy(data):
         )
 
 
+from sysproduction.reporting.data.constants import MAX_POSITION_TRADED_DAILY
+
+
 def auto_populate_limits(data: dataBlob):
     instrument_list = get_list_of_instruments(data)
     auto_parameters = get_auto_population_parameters()
 
-    trade_multiplier = get_and_convert(
+    trade_multiplier = get_input_from_user_and_convert_to_type(
         "Higgest proportion of standard position expected to trade daily?",
         type_expected=float,
-        default_value=0.33,
+        default_value=MAX_POSITION_TRADED_DAILY,
     )
-    period_days = get_and_convert(
+    period_days = get_input_from_user_and_convert_to_type(
         "What period in days to set limit for?", type_expected=int, default_value=1
     )
     _ = [
         set_trade_limit_for_instrument(
             data,
             instrument_code=instrument_code,
-            auto_parameters = auto_parameters,
+            auto_parameters=auto_parameters,
             trade_multiplier=trade_multiplier,
             period_days=period_days,
-
         )
         for instrument_code in instrument_list
     ]
     return None
-
 
 
 def set_trade_limit_for_instrument(
@@ -245,16 +267,16 @@ def set_trade_limit_for_instrument(
     instrument_code: str,
     trade_multiplier: float,
     period_days: int,
-    auto_parameters: parametersForAutoPopulation
+    auto_parameters: parametersForAutoPopulation,
 ):
 
     trade_limits = dataTradeLimits(data)
     new_limit = calc_trade_limit_for_instrument(
         data,
         instrument_code=instrument_code,
-        auto_parameters = auto_parameters,
+        auto_parameters=auto_parameters,
         trade_multiplier=trade_multiplier,
-        period_days=period_days
+        period_days=period_days,
     )
     if np.isnan(new_limit):
         print("Can't calculate trade limit for %s, not setting" % instrument_code)
@@ -272,13 +294,10 @@ def calc_trade_limit_for_instrument(
     instrument_code: str,
     trade_multiplier: float,
     period_days: int,
-    auto_parameters: parametersForAutoPopulation
-
+    auto_parameters: parametersForAutoPopulation,
 ):
-    standard_position = get_standardised_position_at_max_forecast(
-        data,
-        instrument_code=instrument_code,
-        auto_parameters = auto_parameters
+    standard_position = get_maximum_position_at_max_forecast(
+        data, instrument_code=instrument_code, auto_parameters=auto_parameters
     )
     if np.isnan(standard_position):
         return np.nan
@@ -289,92 +308,236 @@ def calc_trade_limit_for_instrument(
 
     return standard_trade_int
 
+
+from sysproduction.reporting.data.constants import (
+    IDM_ASSUMED,
+    INSTRUMENT_WEIGHT_ASSUMED,
+    RAW_MAX_LEVERAGE,
+    MAX_RISK_EXPOSURE_ONE_INSTRUMENT,
+)
+
+
 def get_auto_population_parameters() -> parametersForAutoPopulation:
     print("Enter parameters to estimate typical position sizes")
-    notional_risk_target = get_and_convert(
-        "Notional risk target (% per year)", type_expected=float, default_value=0.25
+    notional_risk_target = get_input_from_user_and_convert_to_type(
+        "Notional risk target (% per year, 0.25 = 25%%)",
+        type_expected=float,
+        default_value=RISK_TARGET_ASSUMED / 100.0,
     )
-    approx_IDM = get_and_convert(
-        "Approximate IDM", type_expected=float, default_value=2.5
+    approx_IDM = get_input_from_user_and_convert_to_type(
+        "Approximate IDM", type_expected=float, default_value=IDM_ASSUMED
     )
-    notional_instrument_weight = get_and_convert(
+    notional_instrument_weight = get_input_from_user_and_convert_to_type(
         "Notional instrument weight (go large for safety!)",
         type_expected=float,
-        default_value=0.1,
+        default_value=INSTRUMENT_WEIGHT_ASSUMED,
     )
-    raw_max_leverage = get_and_convert(
+    raw_max_leverage = get_input_from_user_and_convert_to_type(
         "Maximum Leverage per instrument (notional exposure*# contracts / capital)",
         type_expected=float,
-        default_value=1.0,
+        default_value=RAW_MAX_LEVERAGE,
     )
-    # because we multiply by eg 2, need to half this
-    auto_parameters = parametersForAutoPopulation(raw_max_leverage = raw_max_leverage,
-                   max_vs_average_forecast = MAX_VS_AVERAGE_FORECAST,
-                   notional_risk_target =notional_risk_target,
-                   approx_IDM = approx_IDM,
-                   notional_instrument_weight = notional_instrument_weight)
+
+    max_proportion_risk_one_contract = get_input_from_user_and_convert_to_type(
+        "Maximum proportion of risk in a single instrument (0.1 = 10%%)",
+        type_expected=float,
+        default_value=MAX_RISK_EXPOSURE_ONE_INSTRUMENT,
+    )
+
+    max_proportion_of_volume = get_input_from_user_and_convert_to_type(
+        "Maximum proportion of volume for expiry with largest volume (0.1 = 10%)",
+        type_expected=float,
+        default_value=MAX_PROPORTION_OF_VOLUME,
+    )
+
+    auto_parameters = parametersForAutoPopulation(
+        raw_max_leverage=raw_max_leverage,
+        max_vs_average_forecast=MAX_VS_AVERAGE_FORECAST,
+        notional_risk_target=notional_risk_target,
+        approx_IDM=approx_IDM,
+        max_proportion_risk_one_contract=max_proportion_risk_one_contract,
+        notional_instrument_weight=notional_instrument_weight,
+        max_proportion_of_volume=max_proportion_of_volume,
+    )
 
     return auto_parameters
 
 
-def get_standardised_position_at_max_forecast(
-    data: dataBlob,
-    instrument_code: str,
-    auto_parameters: parametersForAutoPopulation
+def get_maximum_position_at_max_forecast(
+    data: dataBlob, instrument_code: str, auto_parameters: parametersForAutoPopulation
 ) -> float:
 
     risk_data = get_risk_data_for_instrument(data, instrument_code)
-    position_for_risk = get_standardised_position_for_risk(risk_data,
-                                                           auto_parameters = auto_parameters)
+    position_for_risk = get_standardised_position_for_risk(
+        risk_data, auto_parameters=auto_parameters
+    )
     position_with_leverage = get_maximum_position_given_leverage_limit(
-                        risk_data,
-                        auto_parameters = auto_parameters
-                        )
+        risk_data, auto_parameters=auto_parameters
+    )
 
-    standard_position = min(position_for_risk, position_with_leverage)
+    position_for_concentration = get_maximum_position_given_risk_concentration_limit(
+        risk_data, auto_parameters=auto_parameters
+    )
+
+    position_for_volume = get_max_position_give_volume_limit(
+        data, instrument_code=instrument_code, auto_parameters=auto_parameters
+    )
+
+    standard_position = min(
+        position_for_risk,
+        position_with_leverage,
+        position_for_concentration,
+        position_for_volume,
+    )
 
     print(
-        "Standardised position for %s is %f, minimum of %f (risk) and %f (leverage)"
+        "Standardised maximum position for %s is %.1f, minimum of %.1f (risk), %.1f (leverage), %.1f (concentration), and %1.f (volume)"
         % (
             instrument_code,
             standard_position,
             position_for_risk,
             position_with_leverage,
+            position_for_concentration,
+            position_for_volume,
         )
     )
 
     return standard_position
 
 
-
-
-
-def get_standardised_position_for_risk(risk_data: dict,
-                                       auto_parameters: parametersForAutoPopulation) -> int:
+def get_standardised_position_for_risk(
+    risk_data: dict, auto_parameters: parametersForAutoPopulation
+) -> float:
 
     capital = risk_data["capital"]
     annual_risk_per_contract = risk_data["annual_risk_per_contract"]
+    if np.isnan(annual_risk_per_contract):
+        print(
+            "No estimated risk for contract, can't calculate standard position - returning zero"
+        )
+        return 0
+
     max_forecast_ratio = auto_parameters.max_vs_average_forecast
     idm = auto_parameters.approx_IDM
     instr_weight = auto_parameters.notional_instrument_weight
     risk_target = auto_parameters.notional_risk_target
 
-    standard_position = max_forecast_ratio *             \
-                        capital * idm      *             \
-                        instr_weight * risk_target /     \
-                        (annual_risk_per_contract)
+    standard_position = abs(
+        max_forecast_ratio
+        * capital
+        * idm
+        * instr_weight
+        * risk_target
+        / (annual_risk_per_contract)
+    )
 
-    return abs(standard_position)
+    print(
+        "Standard position = %.2f = (Max / Average forecast) * Capital * IDM * instrument weight * risk target / Annual cash risk per contract "
+        % (standard_position)
+    )
+    print(
+        "                  = (%.1f) * %.0f * %.2f * %.3f * %.3f / %.2f"
+        % (
+            max_forecast_ratio,
+            capital,
+            idm,
+            instr_weight,
+            risk_target,
+            annual_risk_per_contract,
+        )
+    )
+
+    return standard_position
 
 
 def get_maximum_position_given_leverage_limit(
-    risk_data: dict,
-        auto_parameters: parametersForAutoPopulation
+    risk_data: dict, auto_parameters: parametersForAutoPopulation
 ) -> float:
     notional_exposure_per_contract = risk_data["contract_exposure"]
-    max_exposure = risk_data["capital"] * auto_parameters.raw_max_leverage
+    capital = risk_data["capital"]
+    max_leverage = auto_parameters.raw_max_leverage
+    max_exposure = capital * max_leverage
 
-    return abs(max_exposure / notional_exposure_per_contract)
+    max_position = abs(max_exposure / notional_exposure_per_contract)
+    round_max_position = int(np.floor(max_position))
+
+    print(
+        "Max position with leverage = %.2f (%d) = Max exposure / Notional per contract = %0.f / %1.f"
+        % (
+            max_position,
+            round_max_position,
+            max_exposure,
+            notional_exposure_per_contract,
+        )
+    )
+
+    print(
+        "(Max exposure = Capital * Maximum leverage = %.0f * %.2f"
+        % (capital, max_leverage)
+    )
+
+    return round_max_position
+
+
+def get_maximum_position_given_risk_concentration_limit(
+    risk_data: dict, auto_parameters: parametersForAutoPopulation
+) -> float:
+
+    ccy_risk_per_contract = abs(risk_data["annual_risk_per_contract"])
+    if np.isnan(ccy_risk_per_contract):
+        print("Can't get risk per contract, Max position exposure limit will be zero")
+        return 0
+
+    capital = risk_data["capital"]
+    risk_target = auto_parameters.notional_risk_target
+    cash_risk_capital = capital * risk_target
+
+    max_proportion_risk_one_contract = auto_parameters.max_proportion_risk_one_contract
+
+    risk_budget_this_contract = cash_risk_capital * max_proportion_risk_one_contract
+
+    position_limit = abs(risk_budget_this_contract / ccy_risk_per_contract)
+    round_position_limit = int(np.floor(position_limit))
+
+    print(
+        "Max position exposure limit = %.2f (%d) = Risk budget / CCy risk per contract = %.1f / %.1f"
+        % (
+            position_limit,
+            round_position_limit,
+            risk_budget_this_contract,
+            ccy_risk_per_contract,
+        )
+    )
+    print(
+        "(Risk budget = Cash risk capital * max proportion of risk = %.0f * %.3f)"
+        % (cash_risk_capital, max_proportion_risk_one_contract)
+    )
+    print(
+        "(Cash risk capital = Capital * Risk target = %0.f * %.3f"
+        % (capital, risk_target)
+    )
+
+    return round_position_limit
+
+
+def get_max_position_give_volume_limit(
+    data: dataBlob, instrument_code: str, auto_parameters: parametersForAutoPopulation
+) -> float:
+
+    max_proportion_of_volume = auto_parameters.max_proportion_of_volume
+    volume_for_instrument = get_best_average_daily_volume_for_instrument(
+        data, instrument_code
+    )
+    if np.isnan(volume_for_instrument):
+        print("No volume data available!! Assuming no constraint on liquidity")
+        return 999999999
+
+    volume_limit = max_proportion_of_volume * volume_for_instrument
+    print(
+        "Volume is %d and we are happy to do %.1f%% of that, i.e. %f"
+        % (volume_for_instrument, max_proportion_of_volume * 100, volume_limit)
+    )
+    return volume_limit
 
 
 def view_position_limit(data):
@@ -398,12 +561,12 @@ def change_position_limit_for_instrument(data):
     view_position_limit(data)
     data_position_limits = dataPositionLimits(data)
     instrument_code = get_valid_instrument_code_from_user(data, allow_all=False)
-    new_position_limit = get_and_convert(
+    new_position_limit = get_input_from_user_and_convert_to_type(
         "New position limit?",
         type_expected=int,
         allow_default=True,
-        default_str="No limit",
         default_value=-1,
+        default_str="No limit",
     )
     if new_position_limit == -1:
         data_position_limits.delete_position_limit_for_instrument(instrument_code)
@@ -421,7 +584,7 @@ def change_position_limit_for_instrument_strategy(data):
         data, allow_all=False, source="positions"
     )
     instrument_code = get_valid_instrument_code_from_user(data, allow_all=False)
-    new_position_limit = get_and_convert(
+    new_position_limit = get_input_from_user_and_convert_to_type(
         "New position limit?",
         type_expected=int,
         allow_default=True,
@@ -449,9 +612,7 @@ def auto_populate_position_limits(data: dataBlob):
     auto_parameters = get_auto_population_parameters()
     [
         set_position_limit_for_instrument(
-            data,
-            instrument_code=instrument_code,
-            auto_parameters = auto_parameters
+            data, instrument_code=instrument_code, auto_parameters=auto_parameters
         )
         for instrument_code in instrument_list
     ]
@@ -459,15 +620,15 @@ def auto_populate_position_limits(data: dataBlob):
 
 
 def set_position_limit_for_instrument(
-    data, instrument_code: str,
-        auto_parameters: parametersForAutoPopulation
+    data, instrument_code: str, auto_parameters: parametersForAutoPopulation
 ):
 
     data_position_limits = dataPositionLimits(data)
+    existing_position_limit = (
+        data_position_limits._get_position_limit_object_for_instrument(instrument_code)
+    )
     max_position_int = get_max_rounded_position_for_instrument(
-        data,
-        instrument_code=instrument_code,
-        auto_parameters = auto_parameters
+        data, instrument_code=instrument_code, auto_parameters=auto_parameters
     )
 
     if np.isnan(max_position_int):
@@ -476,33 +637,37 @@ def set_position_limit_for_instrument(
             % instrument_code
         )
     else:
-        print("Update limit for %s with %d" % (instrument_code, max_position_int))
+        print(
+            "Update limit for %s from %s to %d"
+            % (
+                instrument_code,
+                str(existing_position_limit.position_limit),
+                max_position_int,
+            )
+        )
         data_position_limits.set_abs_position_limit_for_instrument(
             instrument_code, max_position_int
         )
 
 
 def get_max_rounded_position_for_instrument(
-    data, instrument_code: str,
-        auto_parameters: parametersForAutoPopulation
+    data, instrument_code: str, auto_parameters: parametersForAutoPopulation
 ):
 
-    max_position = get_standardised_position_at_max_forecast(
-        data,
-        instrument_code=instrument_code,
-        auto_parameters = auto_parameters
+    max_position = get_maximum_position_at_max_forecast(
+        data, instrument_code=instrument_code, auto_parameters=auto_parameters
     )
     if np.isnan(max_position):
         return np.nan
 
-    max_position_int = max(1, int(np.ceil(abs(max_position))))
+    max_position_int = int(abs(max_position))
 
     return max_position_int
 
 
 def view_overrides(data):
     diag_overrides = diagOverrides(data)
-    all_overrides = diag_overrides.get_dict_of_all_overrides()
+    all_overrides = diag_overrides.get_dict_of_all_overrides_with_reasons()
     print("All overrides:\n")
     list_of_keys = list(all_overrides.keys())
     list_of_keys.sort()
@@ -618,14 +783,14 @@ def change_global_process_control_status(data):
 
 
 def get_valid_status_for_process():
-    status_int = print_menu_and_get_response(
+    status_int = print_menu_and_get_desired_option_index(
         {
             1: "Go",
             2: "Do not run (don't stop if already running)",
             3: "Stop (and don't run if not started)",
             4: "Pause (carry on running process, but don't run methods)",
         },
-        default_option=0,
+        default_option_index=0,
         default_str="<CANCEL>",
     )
     return status_int
@@ -648,7 +813,9 @@ def get_process_name(data):
     process_names = get_dict_of_process_controls(data)
     menu_of_options = dict(list(enumerate(process_names)))
     print("Process name?")
-    option = print_menu_and_get_response(menu_of_options, default_option=1)
+    option = print_menu_and_get_desired_option_index(
+        menu_of_options, default_option_index=1
+    )
     ans = menu_of_options[option]
     return ans
 
@@ -700,7 +867,7 @@ def get_list_of_changes_to_make_to_slippage(
 
     for instrument_code in instrument_list:
         pd_row = slippage_comparison_pd.loc[instrument_code]
-        difference = pd_row["% Difference"]
+        difference = pd_row["Difference"]
         configured = pd_row["Configured"]
         suggested_estimate = pd_row["estimate"]
 
@@ -708,33 +875,37 @@ def get_list_of_changes_to_make_to_slippage(
             print("No data for %s" % instrument_code)
             continue
 
-        if abs(difference) * 100 < filter:
+        if abs(difference) < filter:
             ## do nothing
             continue
 
-        mult_factor = calculate_mult_factor(pd_row)
+        mult_factor = calculate_mult_factor_from_cost_row(pd_row)
 
         if mult_factor > 1:
             print("ALL VALUES MULTIPLIED BY %f INCLUDING INPUTS!!!!" % mult_factor)
 
-        suggested_estimate_multiplied = suggested_estimate * mult_factor
+        print_data_with_multiplier(pd_row, mult_factor=mult_factor)
+
+        suggested_estimate_multiplied = round_significant_figures(
+            suggested_estimate * mult_factor, 2
+        )
+
         configured_estimate_multiplied = configured * mult_factor
 
-        print(pd_row * mult_factor)
-        estimate_to_use_with_mult = get_and_convert(
+        estimate_to_use_with_mult = get_input_from_user_and_convert_to_type(
             "New configured slippage value (current %f, default is estimate %f)"
             % (configured_estimate_multiplied, suggested_estimate_multiplied),
             type_expected=float,
             allow_default=True,
-            default_value=suggested_estimate * mult_factor,
+            default_value=suggested_estimate_multiplied,
         )
 
         if estimate_to_use_with_mult == configured_estimate_multiplied:
             print("Same as configured, do nothing...")
             continue
         if estimate_to_use_with_mult != suggested_estimate_multiplied:
-            difference = (
-                abs(estimate_to_use_with_mult / suggested_estimate_multiplied) - 1.0
+            difference = abs(
+                (estimate_to_use_with_mult / suggested_estimate_multiplied) - 1.0
             )
             if difference > 0.5:
                 ans = input(
@@ -751,7 +922,7 @@ def get_list_of_changes_to_make_to_slippage(
 
 
 def get_filter_size_for_slippage() -> float:
-    filter = get_and_convert(
+    filter = get_input_from_user_and_convert_to_type(
         "% difference to filter on? (eg 30 means we ignore differences<30%",
         type_expected=float,
         allow_default=True,
@@ -761,21 +932,29 @@ def get_filter_size_for_slippage() -> float:
     return filter
 
 
-def calculate_mult_factor(pd_row) -> float:
+def calculate_mult_factor_from_cost_row(pd_row) -> float:
     configured = pd_row["Configured"]
     suggested_estimate = pd_row["estimate"]
 
-    smallest = min(configured, suggested_estimate)
-    if smallest > 0.01:
-        return 1
-
-    if smallest == 0:
-        return 1000000
-
-    mag = magnitude(min(suggested_estimate, configured))
-    mult_factor = 10 ** (-mag)
+    smallest_value = min(configured, suggested_estimate)
+    mult_factor = calculate_multiplication_factor_for_nice_repr_of_value(smallest_value)
 
     return mult_factor
+
+
+def print_data_with_multiplier(pd_row, mult_factor: float = 1.0):
+    multiplied_pd_row = copy(pd_row)
+    to_multiply = [
+        "bid_ask_trades",
+        "total_trades",
+        "bid_ask_sampled",
+        "estimate",
+        "Configured",
+    ]
+    for row_name in to_multiply:
+        multiplied_pd_row[row_name] = multiplied_pd_row[row_name] * mult_factor
+
+    print(multiplied_pd_row)
 
 
 def make_changes_to_slippage(data: dataBlob, changes_to_make: dict):
@@ -791,256 +970,121 @@ def make_changes_to_slippage_in_db(data: dataBlob, changes_to_make: dict):
 
 def backup_instrument_data_to_csv(data: dataBlob):
     backup_data = get_data_and_create_csv_directories("")
-    backup_data.mongo_futures_instrument = data.db_futures_instrument
+
     print(
-        "Backing up database to .csv %s; you will need to copy to /pysystemtrade/data/csvconfig/ for it to work in sim"
+        "Backing up instrument configuration in database to .csv %s; you will need to copy to /pysystemtrade/data/csvconfig/ for it to work in sim"
         % backup_data.csv_futures_instrument.config_file
     )
     backup_instrument_data(backup_data)
 
 
-def suggest_bad_markets(data: dataBlob):
-    max_cost, min_contracts, min_risk, \
-             = get_bad_market_filter_parameters()
+def backup_roll_parameters_data_to_csv(data: dataBlob):
+    backup_data = get_data_and_create_csv_directories("")
 
-    auto_parameters = get_auto_population_parameters()
-    min_ann_perc_std = from_auto_parameters_to_min_ann_perc_std(auto_parameters)
-    SR_costs, liquidity_data, risk_data = get_data_for_markets(data)
-    bad_markets = print_and_return_entire_bad_market_list(
-        SR_costs=SR_costs,
-        liquidity_data=liquidity_data,
-        risk_data =risk_data,
-        min_risk=min_risk,
-        min_contracts=min_contracts,
-        max_cost=max_cost,
-        min_ann_perc_std=min_ann_perc_std
+    print(
+        "Backing up roll parameters in database to .csv %s; you will need to copy to /pysystemtrade/data/csvconfig/ for it to work in sim"
+        % backup_data.csv_roll_parameters.config_file
     )
-    display_bad_market_info(bad_markets)
+    backup_roll_parameters(backup_data)
 
-def from_auto_parameters_to_min_ann_perc_std(auto_parameters: parametersForAutoPopulation) -> float:
-    return 100*auto_parameters.max_vs_average_forecast *         \
-            auto_parameters.approx_IDM *                     \
-            auto_parameters.notional_instrument_weight *     \
-            auto_parameters.notional_risk_target /           \
-            auto_parameters.raw_max_leverage
 
-def get_bad_market_filter_parameters():
-    max_cost = get_and_convert(
-        "Maximum SR cost?", type_expected=float, allow_default=True, default_value=0.01
-    )
-    min_contracts = get_and_convert(
-        "Minimum contracts traded per day?",
-        type_expected=int,
-        allow_default=True,
-        default_value=100,
-    )
-    min_risk = get_and_convert(
-        "Min risk $m traded per day?",
-        type_expected=float,
-        allow_default=True,
-        default_value=1.5,
+def check_price_multipliers_consistent(data: dataBlob):
+    list_of_instruments = get_list_of_instruments(data, "single")
+    for instrument_code in list_of_instruments:
+        check_price_multipliers_consistent_for_instrument(data, instrument_code)
+
+
+def check_price_multipliers_consistent_for_instrument(
+    data: dataBlob, instrument_code: str
+):
+
+    print("Checking %s" % instrument_code)
+    data_broker = dataBroker(data)
+    diag_instruments = diagInstruments(data)
+    data_contracts = dataContracts(data)
+
+    point_size_from_instrument_config = diag_instruments.get_point_size(instrument_code)
+
+    ib_config_for_instrument = (
+        data_broker.broker_futures_instrument_data.get_instrument_data(instrument_code)
     )
 
-    return max_cost, min_contracts, min_risk
-
-
-def get_data_for_markets(data):
-    api = reportingApi(data)
-    SR_costs = api.SR_costs()
-    SR_costs = SR_costs.dropna()
-    liquidity_data = api.liquidity_data()
-    risk_data = api.instrument_risk_data_all_instruments()
-
-    return SR_costs, liquidity_data, risk_data
-
-def print_and_return_entire_bad_market_list(    SR_costs: pd.DataFrame,
-    liquidity_data: pd.DataFrame,
-    risk_data: pd.DataFrame,
-    max_cost: float = 0.01,
-    min_risk: float = 1.5,
-    min_contracts: int = 100,
-    min_ann_perc_std = 1.25
-    ) -> list:
-
-    expensive, not_enough_trading_risk, \
-    too_safe, not_enough_trading_contracts =\
-        get_bad_market_list(SR_costs=SR_costs,
-                            liquidity_data=liquidity_data,
-                            risk_data=risk_data,
-                            max_cost=max_cost,
-                            min_risk=min_risk,
-                            min_contracts=min_contracts,
-                            min_ann_perc_std=min_ann_perc_std)
-
-    print("Too expensive: (SR cost> %.2f)\n" % max_cost)
-    print(expensive)
-    print("\n Too safe: (Annual risk< %.2f) \n" % min_ann_perc_std)
-    print(too_safe)
-    print("\n Not enough volume (contracts < %d):  \n" % int(min_contracts))
-    print(not_enough_trading_contracts)
-    print("\n Not enough volume (risk < %.2f): \n" % min_risk)
-    print(not_enough_trading_risk)
-
-    bad_markets = list(set(expensive
-                           + not_enough_trading_risk
-                           + not_enough_trading_contracts
-                           + too_safe))
-    bad_markets.sort()
-
-    return bad_markets
-
-
-
-def get_bad_market_list(
-    SR_costs: pd.DataFrame,
-    liquidity_data: pd.DataFrame,
-    risk_data: pd.DataFrame,
-    max_cost: float = 0.01,
-    min_risk: float = 1.5,
-    min_contracts: int = 100,
-    min_ann_perc_std = 1.25
-) -> tuple:
-    expensive = list(SR_costs[SR_costs.SR_cost > max_cost].index)
-
-    not_enough_trading_contracts = list(
-        liquidity_data[liquidity_data.contracts < min_contracts].index
+    contract_id_priced_contract = data_contracts.get_priced_contract_id(instrument_code)
+    priced_contract = futuresContract(instrument_code, contract_id_priced_contract)
+    contract_price_magnifier_from_ib = (
+        data_broker.broker_futures_contract_data.get_price_magnifier_for_contract(
+            priced_contract
+        )
     )
-    not_enough_trading_risk = list(liquidity_data[liquidity_data.risk < min_risk].index)
 
-    too_safe = list(risk_data[risk_data.annual_perc_stdev<min_ann_perc_std].index)
+    ib_configured_multiplier = ib_config_for_instrument.ib_data.ibMultiplier
+    ib_configured_price_magnifier = ib_config_for_instrument.ib_data.priceMagnifier
+    ib_configured_effective_multiplier = (
+        ib_config_for_instrument.ib_data.effective_multiplier
+    )
 
-    too_safe.sort()
-    expensive.sort()
-    not_enough_trading_contracts.sort()
-    not_enough_trading_risk.sort()
-
-    return expensive, not_enough_trading_risk, too_safe, not_enough_trading_contracts
-
-def display_bad_market_info(bad_markets: list):
-
-    existing_bad_markets = get_existing_bad_markets()
-    existing_bad_markets.sort()
-
-    new_bad_markets = list(set(bad_markets).difference(set(existing_bad_markets)))
-    removed_bad_markets = list(set(existing_bad_markets).difference(set(bad_markets)))
-
-    print("New bad markets %s" % new_bad_markets)
-    print("Removed bad markets %s" % removed_bad_markets)
-
-    print("Add the following to yaml .config under bad_markets heading:\n")
-    print("bad_markets:")
-    __ = [print("  - %s" % instrument) for instrument in bad_markets]
-
-def get_existing_bad_markets():
-    production_config = get_production_config()
-
-    config = production_config.get_element_or_missing_data("exclude_instrument_lists")
-    if config is missing_data:
-        print("NO BAD MARKETS IN CONFIG!")
-        existing_bad_markets = []
-    else:
-        existing_bad_markets = config['bad_markets']
-
-    return existing_bad_markets
-
-no_change = object()
-
-
-def suggest_duplicate_markets(data: dataBlob):
-    filters = get_bad_market_filter_parameters()
-    duplicate_dict = generate_matching_duplicate_dict()
-    mkt_data = get_data_for_markets(data)
-    duplicates = [
-        suggest_duplicate_markets_for_dict_entry(mkt_data, dict_entry, filters)
-        for dict_entry in duplicate_dict.values()
-    ]
-    duplicates_changed = [
-        duplicate_entry
-        for duplicate_entry in duplicates
-        if duplicate_entry is not no_change
-    ]
-    for duplicate_results in duplicates_changed:
+    if contract_price_magnifier_from_ib != ib_configured_price_magnifier:
         print(
-            "Replace %s with %s"
-            % (duplicate_results["existing_entry"], duplicate_results["new_entry"])
+            "Configured price magnifier of %s is different from value returned by IB of %s, for %s!"
+            % (
+                str(ib_configured_price_magnifier),
+                str(contract_price_magnifier_from_ib),
+                instrument_code,
+            )
         )
 
-    if len(duplicates_changed) > 0:
-        print("\n\n\n\n")
-        print("\n\n Make the following changes to config.duplicate_instruments\n\n")
+    if ib_configured_effective_multiplier != point_size_from_instrument_config:
+        print(
+            "IB configured effective multiplier of %s (equal to multiplier %s x magnifier %s) is different from instrument configuration value of %s for %s"
+            % (
+                str(ib_configured_effective_multiplier),
+                str(ib_configured_multiplier),
+                str(ib_configured_price_magnifier),
+                str(point_size_from_instrument_config),
+                instrument_code,
+            )
+        )
+
+    return None
 
 
-def suggest_duplicate_markets_for_dict_entry(
-    mkt_data, dict_entry: dict, filters: tuple
-):
-    included = dict_entry["included"]
-    excluded = dict_entry["excluded"]
-
-    all_markets = list(set(list(included + excluded)))
-    mkt_data_for_duplicates = get_df_of_data_for_duplicate(mkt_data, all_markets)
-    best_market = get_best_market(mkt_data_for_duplicates, filters)
-    print(
-        "\n\nCurrent list of included markets %s, excluded markets %s"
-        % (included, excluded)
-    )
-    print(mkt_data_for_duplicates)
-    print(
-        "Best market %s, current included market(s) %s" % (best_market, str(included))
+def delete_instrument_from_prices(data: dataBlob):
+    exit_code = ""
+    instrument_code = get_valid_instrument_code_from_user(
+        allow_all=False, source="single", allow_exit=True, exit_code=exit_code
     )
 
-    if best_market is no_good_markets:
-        return no_change
+    if instrument_code == exit_code:
+        return False
 
-    if len(included) > 1:
-        return dict(new_entry=best_market, existing_entry=str(included))
+    sure = true_if_answer_is_yes(
+        "Note that this will only delete price data and contract data. Won't delete configuration, position, or order data related to an instrument. Are you REALLY sure about this???"
+    )
+    if not sure:
+        return False
 
-    if best_market != included[0]:
-        return dict(new_entry=best_market, existing_entry=included[0])
+    diag_prices = diagPrices(data)
+    intraday_frequency = diag_prices.get_intraday_frequency_for_historical_download()
+    daily_frequency = DAILY_PRICE_FREQ
 
-    return no_change
+    update_prices = updatePrices(data)
+    update_prices.delete_contract_prices_at_frequency_for_instrument_code(
+        instrument_code, frequency=intraday_frequency, are_you_sure=True
+    )
+    update_prices.delete_contract_prices_at_frequency_for_instrument_code(
+        instrument_code, frequency=daily_frequency, are_you_sure=True
+    )
+    update_prices.delete_merged_contract_prices_for_instrument_code(
+        instrument_code, are_you_sure=True
+    )
+    update_prices.delete_multiple_prices(instrument_code, are_you_sure=True)
+    update_prices.delete_adjusted_prices(instrument_code, are_you_sure=True)
 
+    update_prices.delete_spreads(instrument_code, are_you_sure=True)
 
-def get_df_of_data_for_duplicate(mkt_data, all_markets: list) -> pd.DataFrame:
-    mkt_data_for_duplicates = [
-        get_market_data_for_duplicate(mkt_data, instrument_code)
-        for instrument_code in all_markets
-    ]
-
-    mkt_data_for_duplicates = pd.DataFrame(mkt_data_for_duplicates, index=all_markets)
-
-    return mkt_data_for_duplicates
-
-
-no_good_markets = named_object("<No good markets>")
-
-
-def get_best_market(mkt_data_for_duplicates: pd.DataFrame, filters: tuple) -> str:
-    max_cost, min_contracts, min_risk = filters
-    only_valid = mkt_data_for_duplicates.dropna()
-    only_valid = only_valid[only_valid.SR_cost <= max_cost]
-    only_valid = only_valid[only_valid.volume_contracts > min_contracts]
-    only_valid = only_valid[only_valid.volume_risk > min_risk]
-
-    if len(only_valid) == 0:
-        return no_good_markets
-
-    only_valid = only_valid.sort_values("contract_size")
-    best_market = only_valid.index[0]
-    return best_market
-
-
-def get_market_data_for_duplicate(mkt_data, instrument_code: str):
-    SR_costs, liquidity_data, risk_data = mkt_data
-    SR_cost = SR_costs.SR_cost.get(instrument_code, np.nan)
-    volume_contracts = liquidity_data.contracts.get(instrument_code, np.nan)
-    volume_risk = liquidity_data.risk.get(instrument_code, np.nan)
-    contract_size = risk_data.annual_risk_per_contract.get(instrument_code, np.nan)
-
-    return dict(
-        SR_cost=np.round(SR_cost, 6),
-        volume_contracts=volume_contracts,
-        volume_risk=np.round(volume_risk, 2),
-        contract_size=np.round(contract_size),
+    data_contracts = dataContracts(data)
+    data_contracts.delete_all_contracts_for_instrument(
+        instrument_code, are_you_sure=True
     )
 
 
@@ -1073,6 +1117,14 @@ dict_of_functions = {
     44: finish_all_processes,
     45: view_process_config,
     50: auto_update_spread_costs,
-    51: suggest_bad_markets,
-    52: suggest_duplicate_markets,
+    51: backup_instrument_data_to_csv,
+    52: copy_instrument_config_from_csv_to_mongo,
+    53: backup_roll_parameters_data_to_csv,
+    54: copy_roll_parameters_from_csv_to_mongo,
+    55: safely_modify_roll_parameters,
+    56: check_price_multipliers_consistent,
+    60: delete_instrument_from_prices,
 }
+
+if __name__ == "__main__":
+    interactive_controls()

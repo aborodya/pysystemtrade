@@ -1,6 +1,6 @@
 import pandas as pd
 
-from syscore.objects import missing_instrument
+from syscore.constants import missing_instrument
 from sysdata.sim.sim_data import simData
 
 from sysobjects.adjusted_prices import futuresAdjustedPrices
@@ -235,7 +235,6 @@ class futuresSimData(simData):
 
     def get_roll_parameters(self, instrument_code: str) -> rollParameters:
         raise NotImplementedError
-
 
     def get_instrument_object_with_meta_data(
         self, instrument_code: str

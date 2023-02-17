@@ -1,15 +1,14 @@
-from dataclasses import dataclass
 from copy import copy
 
 import pandas as pd
 
 from syscore.objects import (
-    arg_not_supplied,
     resolve_data_method,
     resolve_function,
     hasallattr,
 )
-from syscore.pdutils import replace_all_zeros_with_nan
+from syscore.constants import arg_not_supplied
+from syscore.pandas.strategy_functions import replace_all_zeros_with_nan
 from syscore.text import (
     sort_dict_by_underscore_length,
     strip_underscores_from_dict_keys,
@@ -435,7 +434,7 @@ def create_variations_oneparameter(baseRule, list_of_args, argname, nameformat="
     :returns: dict of Tradingrule objects
 
     >>>
-    >>> rule=TradingRule(("systems.provided.example.rules.ewmac_forecast_with_defaults", [], {}))
+    >>> rule=TradingRule(("systems.provided.rules.ewmac.ewmac_forecast_with_defaults", [], {}))
     >>> variations=create_variations_oneparameter(rule, [4,10,100], "Lfast")
     >>> ans=list(variations.keys())
     >>> ans.sort()
@@ -478,7 +477,7 @@ def create_variations(
 
     :returns: dict of Tradingrule objects
 
-    >>> rule=TradingRule(("systems.provided.example.rules.ewmac_forecast_with_defaults", [], {}))
+    >>> rule=TradingRule(("systems.provided.rules.ewmac.ewmac_forecast_with_defaults", [], {}))
     >>> variations=create_variations(rule, [dict(Lfast=2, Lslow=8), dict(Lfast=4, Lslow=16)], "Lfast", nameformat="ewmac_%s_%s")
     >>> ans=list(variations.keys())
     >>> ans.sort()

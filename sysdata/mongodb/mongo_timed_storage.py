@@ -3,7 +3,7 @@ from sysdata.production.timed_storage import (
     classStrWithListOfEntriesAsListOfDicts,
     listOfEntriesAsListOfDicts,
 )
-from syscore.objects import arg_not_supplied, missing_data
+from syscore.constants import arg_not_supplied
 
 from sysdata.mongodb.mongo_generic import mongoDataWithMultipleKeys
 from syslogdiag.log_to_screen import logtoscreen
@@ -27,7 +27,9 @@ class mongoListOfEntriesData(listOfEntriesData):
     def _data_name(self) -> str:
         raise NotImplementedError("Need to inherit for a specific data type")
 
-    def __init__(self, mongo_db=arg_not_supplied, log=logtoscreen("mongoCapitalData")):
+    def __init__(
+        self, mongo_db=arg_not_supplied, log=logtoscreen("mongoStrategyCapitalData")
+    ):
 
         super().__init__(log=log)
         self._mongo_data = mongoDataWithMultipleKeys(
@@ -56,8 +58,6 @@ class mongoListOfEntriesData(listOfEntriesData):
     ) -> classStrWithListOfEntriesAsListOfDicts:
 
         result_dict = self.mongo_data.get_result_dict_for_dict_keys(args_dict)
-        if result_dict is missing_data:
-            return missing_data
 
         data_class = result_dict[DATA_CLASS_KEY]
         series_as_list_of_dicts = result_dict[ENTRY_SERIES_KEY]

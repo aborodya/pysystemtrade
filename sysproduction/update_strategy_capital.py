@@ -1,7 +1,8 @@
 from copy import copy
 import datetime
 
-from syscore.objects import success, missing_data
+from syscore.exceptions import missingData
+from syscore.constants import success
 
 from sysdata.data_blob import dataBlob
 from sysproduction.data.capital import dataCapital, dataMargin
@@ -27,8 +28,6 @@ class updateStrategyCapital(object):
     def __init__(self, data: dataBlob):
         self.data = data
 
-
-
     def strategy_allocation(self):
         self.capital_strategy_allocation()
         self.margin_strategy_allocation()
@@ -46,8 +45,9 @@ class updateStrategyCapital(object):
         try:
             data = self.data
             total_capital = get_total_current_capital(data)
-            strategy_capital_dict = call_allocation_function(data,
-                                                             capital_to_allocate=total_capital)
+            strategy_capital_dict = call_allocation_function(
+                data, capital_to_allocate=total_capital
+            )
             write_allocated_strategy_capital(data, strategy_capital_dict)
         except Exception as e:
             # Problem, will send email
@@ -59,47 +59,49 @@ class updateStrategyCapital(object):
         try:
             data = self.data
             total_margin = get_total_current_margin(data)
-            strategy_margin_dict = call_allocation_function(data,
-                                                            capital_to_allocate=total_margin)
-            write_allocated_strategy_margin(data,
-                                             strategy_margin_dict)
+            strategy_margin_dict = call_allocation_function(
+                data, capital_to_allocate=total_margin
+            )
+            write_allocated_strategy_margin(data, strategy_margin_dict)
         except Exception as e:
             # Problem, will send email
             self.data.log.critical("Error [%s] whilst allocating strategy margin" % e)
 
         return None
 
+
 def get_total_current_capital(data: dataBlob) -> float:
     data_capital = dataCapital(data)
-    total_capital = data_capital.get_current_total_capital()
-
-    if total_capital is missing_data:
+    try:
+        total_capital = data_capital.get_current_total_capital()
+    except missingData:
         data.log.critical("Can't allocate strategy capital without total capital")
-        raise Exception()
+        raise
 
     return total_capital
 
+
 def get_total_current_margin(data: dataBlob) -> float:
     data_margin = dataMargin(data)
-    total_margin = data_margin.get_current_total_margin()
-
-    if total_margin is missing_data:
+    try:
+        total_margin = data_margin.get_current_total_margin()
+    except missingData:
         data.log.critical("Can't allocate strategy margin without total margin")
-        raise Exception()
+        raise
 
     return total_margin
 
-def call_allocation_function(data: dataBlob,
-                             capital_to_allocate: float) -> dict:
+
+def call_allocation_function(data: dataBlob, capital_to_allocate: float) -> dict:
 
     strategy_allocation_config_dict = get_strategy_allocation_config_dict(data)
 
     strategy_allocation_function_str = strategy_allocation_config_dict.pop("function")
     strategy_allocation_function = resolve_function(strategy_allocation_function_str)
 
-    results = strategy_allocation_function(data,
-                                            capital_to_allocate = capital_to_allocate,
-                                           **strategy_allocation_config_dict)
+    results = strategy_allocation_function(
+        data, capital_to_allocate=capital_to_allocate, **strategy_allocation_config_dict
+    )
 
     return results
 
@@ -127,8 +129,9 @@ def write_allocated_strategy_capital(data: dataBlob, strategy_capital_dict: dict
 def write_allocated_strategy_margin(data: dataBlob, strategy_margin_dict: dict):
     margin_data = dataMargin(data)
     for strategy_name, strategy_margin in strategy_margin_dict.items():
-        margin_data.add_strategy_margin_entry(strategy_name=strategy_name,
-                                              margin_entry=strategy_margin)
+        margin_data.add_strategy_margin_entry(
+            strategy_name=strategy_name, margin_entry=strategy_margin
+        )
 
         data.log.msg(
             "Updated margin for %s to %f" % (strategy_name, strategy_margin),
@@ -136,5 +139,5 @@ def write_allocated_strategy_margin(data: dataBlob, strategy_margin_dict: dict):
         )
 
 
-
-
+if __name__ == "__main__":
+    update_strategy_capital()

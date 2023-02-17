@@ -2,7 +2,7 @@ import datetime
 from copy import copy
 
 from syscore.dateutils import datetime_to_long, long_to_datetime
-from syscore.objects import arg_not_supplied
+from syscore.constants import arg_not_supplied
 
 LOG_MAPPING = dict(msg=0, terse=1, warn=2, error=3, critical=4)
 INVERSE_MAP = dict([(value, key) for key, value in LOG_MAPPING.items()])
@@ -101,7 +101,7 @@ class logEntry(object):
 
     @property
     def timestamp_as_text(self) -> str:
-        return self.timestamp.strftime("%Y-%m-%d:%H%M.%S")
+        return self.timestamp.strftime("%Y-%m-%d %H:%M:%S")
 
     @property
     def text(self) -> str:

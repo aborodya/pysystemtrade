@@ -1,4 +1,4 @@
-This document is specifically about storing and processsing *futures data*. 
+This document is specifically about storing and processing *futures data*. 
 
 Related documents:
 
@@ -35,7 +35,7 @@ Table of Contents
    * [Getting and storing FX data](#getting-and-storing-fx-data)
    * [Finished!](#finished)
 * [Part 2: Overview of futures data in pysystemtrade](#part-2-overview-of-futures-data-in-pysystemtrade)
-   * [Heirarchy of data storage and access objects](#heirarchy-of-data-storage-and-access-objects)
+   * [Hierarchy of data storage and access objects](#heirarchy-of-data-storage-and-access-objects)
    * [Directory structure (not the whole package! Just related to data objects, storage and interfaces)](#directory-structure-not-the-whole-package-just-related-to-data-objects-storage-and-interfaces)
 * [Part 3: Storing and representing futures data](#part-3-storing-and-representing-futures-data)
    * [Futures data objects and their generic data storage objects](#futures-data-objects-and-their-generic-data-storage-objects)
@@ -116,7 +116,7 @@ Hence there are five possible use cases:
 - You want to update the .csv data used for backtests that is shipped with pysystemtrade
 - You want to run backtests, but from faster databases rather than silly old .csv files, as I discuss how to do [later](#dbfuturessimdata)
 - You want to run pysystemtrade in [production](/docs/production.md), which requires database storage.
-- You want both database storage and updated .csv files, maybe because you want to keep a backup of your data in .csv (someting that the production code does automatically, FWIW) or use that for backtesting
+- You want both database storage and updated .csv files, maybe because you want to keep a backup of your data in .csv (something that the production code does automatically, FWIW) or use that for backtesting
 
 Because of this it's possible at (almost) every stage to store data in either .csv or databases (the exception are roll calendars, which only live in .csv format).
 
@@ -126,7 +126,7 @@ Because of this it's possible at (almost) every stage to store data in either .c
 
 The first step is to store some instrument configuration information. In principle this can be done in any way, but we are going to *read* from .csv files, and *write* to a [Mongo Database](https://www.mongodb.com/). There are two kinds of configuration; instrument configuration and roll configuration. Instrument configuration consists of static information that enables us to trade an instrument like EDOLLAR: the asset class, futures contract point size, and traded currency (it also includes cost levels, that are required in the simulation environment).
 
-The relevant script to setup *information configuration* is in sysinit - the part of pysystemtrade used to initialise a new system. Here is the script you need to run [instruments_csv_mongo.py](/sysinit/futures/instruments_csv_mongo.py). Notice it uses two types of data objects: the object we write to [`mongoFuturesInstrumentData`](#mongoFuturesInstrumentData) and the object we read from [`csvFuturesInstrumentData`](#csvFuturesInstrumentData). These objects both inherit from the more generic futuresInstrumentData, and are specialist versions of that. You'll see this pattern again and again, and I describe it further in [part two of this document](#storing_futures_data). 
+The relevant script to setup *information configuration* is in sysinit - the part of pysystemtrade used to initialise a new system. Here is the script you need to run [repocsv_instrument_config.py](/sysinit/futures/repocsv_instrument_config.py). Notice it uses two types of data objects: the object we write to [`mongoFuturesInstrumentData`](#mongoFuturesInstrumentData) and the object we read from [`csvFuturesInstrumentData`](#csvFuturesInstrumentData). These objects both inherit from the more generic futuresInstrumentData, and are specialist versions of that. You'll see this pattern again and again, and I describe it further in [part two of this document](#storing_futures_data). 
 
 Make sure you are running a [Mongo Database](#mongoDB) before running this.
 
@@ -176,7 +176,77 @@ Once we have the data we can also store it, in principle, anywhere but I will be
 
 By the way I can't just pull down this data myself and put it on github to save you time. Storing large amounts of data in github isn't a good idea regardless of whether it is in .csv or Mongo files, and there would also be licensing issues with me basically just copying and pasting raw data that belongs to someone else. You have to get, and then store, this stuff yourself. And of course at some point in a live system you would be updating this yourself.
 
-We'll be using [this script](/sysinit/futures/barchart_futures_contract_prices.py), which in turn calls this [other more general script](/sysinit/futures/contract_prices_from_csv_to_arctic.py). Although it's very specific to Barchart, with some work you should be able to adapt it. You will need to call it with the directory where your Barchart .csv files are stored.
+An easy way to bulk download data from [Barchart](https://www.barchart.com) is to create a Premier account, which allows for up to 100 data downloads per day, and to use [bc-utils](https://github.com/bug-or-feature/bc-utils) by [Andy Geach](https://github.com/bug-or-feature).
+We explain how to use it with pysystemtrade at the time of writing below, but we recommend that you read the bc-utils documentation in case these instructions become stale with updated versions of the tool.
+
+To set up bc-utils for use with pysystemtrade, you can use the following steps:
+1. Clone the bc-utils repo to some directory of your choice. For concreteness, we will be using `~/bc-utils` here.
+
+2. Edit `~/bc-utils/bcutils/config.py` to contain the list of contracts you want to download data for. 
+For example, 
+```python
+CONTRACT_MAP = {
+    "RICE": {"code": "ZR", "cycle": "FHKNUX", "tick_date": "2009-01-01"},
+    "SOYOIL": {"code": "ZL", "cycle": "FHKNQUVZ", "tick_date": "2008-05-04"},
+}
+```
+indicates that we are downloading data for the contracts ZR and ZL on Barchart and are matching them to the symbols RICE and SOYOIL, respectively, in pysystemtrade.
+Further, we are downloading the months FHKNUX and FHKNQUVZ, respectively, with hourly data starting from 2009-01-01 and 2008-05-04, respectively, and daily data before those dates.
+
+3. Replace the last code block in `~/bc-utils/bcutils/bc_utils.py` (starting from line 420, at [the time of writing](https://github.com/bug-or-feature/bc-utils/commit/3b95acaa2bbae87af3aaef65dd4f50839986a7d4)) with
+
+```python
+get_barchart_downloads(
+    create_bc_session(config=config),
+    contract_map=CONTRACT_MAP,
+    save_directory="BARCHART_DATA_DOWNLOAD_DIRECTORY",
+    start_year=1975,
+    end_year=2026,
+    dry_run=False)
+```
+(Here, you can set `dry_run` to `True` if you would like to try this script without using any of your 100 daily downloads.)
+
+4. In `~/bc-utils/bcutils/bc_utils.py`, set your Barchart username (BARCHART_USERNAME), password (BARCHART_PASSWORD), and the desired data path (BARCHART_DATA_DOWNLOAD_DIRECTORY) for the Barchart data here:
+```python
+'barchart_username': 'BARCHART_USERNAME',
+'barchart_password': 'BARCHART_PASSWORD'
+```
+
+5. If desired, add bc-utils to your crontab by adding a line like
+```
+00 08 * * 1-7 . $HOME/.profile; cd ~/bc-utils ; python3 bcutils/bc_utils.py >> $ECHO_PATH/barchart_download.txt 2>&1
+```
+This can be helpful given the daily limit of 100 downloads.
+
+6. Once you have downloaded the data you want, you can add them to the mongo database by running the following python snippet (with your chosen BARCHART_DATA_DOWNLOAD_DIRECTORY) from the pysystemtrade directory:
+```python
+from sysdata.csv.csv_futures_contract_prices import ConfigCsvFuturesPrices
+from sysinit.futures.contract_prices_from_csv_to_arctic import (
+    init_arctic_with_csv_futures_contract_prices,
+)
+
+
+barchart_csv_config = ConfigCsvFuturesPrices(input_date_index_name="Time",
+    input_skiprows=0,
+    input_skipfooter=1,
+    input_date_format="%Y-%m-%d",
+    input_column_mapping=dict(OPEN="Open", HIGH="High", LOW="Low", FINAL="Close", VOLUME="Volume"
+    ),
+)
+
+
+def transfer_barchart_prices_to_arctic(datapath):
+    init_arctic_with_csv_futures_contract_prices(
+        datapath, csv_config=barchart_csv_config
+    )
+
+
+transfer_barchart_prices_to_arctic(BARCHART_DATA_DOWNLOAD_DIRECTORY)
+```
+
+Alternatively, if you are very patient, you can manually download the data from the Barchart historical data pages, such as [this one 
+for Cotton #2](https://www.barchart.com/futures/quotes/KG*0/historical-download). 
+Then, to read the data, you can use [this script](/sysinit/futures/barchart_futures_contract_prices.py), which in turn calls this [other more general script](/sysinit/futures/contract_prices_from_csv_to_arctic.py). Although it's very specific to Barchart, with some work you should be able to adapt it. You will need to call it with the directory where your Barchart .csv files are stored.
 
 The script does two things:
 
@@ -204,17 +274,18 @@ Here we can see that the barchart files have one initial row we can ignore, and 
 The actual reading and writing is done here:
 
 ```python
-def init_arctic_with_csv_futures_contract_prices_for_code(instrument_code:str, datapath: str, csv_config = arg_not_supplied):
+def init_arctic_with_csv_futures_contract_prices_for_code(instrument_code: str, datapath: str,
+                                                          csv_config=arg_not_supplied):
     print(instrument_code)
     csv_prices = csvFuturesContractPriceData(datapath, config=csv_config)
     arctic_prices = arcticFuturesContractPriceData()
 
-    csv_price_dict = csv_prices.get_all_prices_for_instrument(instrument_code)
+    csv_price_dict = csv_prices.get_merged_prices_for_instrument(instrument_code)
 
     for contract_date_str, prices_for_contract in csv_price_dict.items():
         print(contract_date_str)
         contract = futuresContract(instrument_code, contract_date_str)
-        arctic_prices.write_prices_for_contract_object(contract, prices_for_contract, ignore_duplication=True)
+        arctic_prices.write_merged_prices_for_contract_object(contract, prices_for_contract, ignore_duplication=True)
 ```
 
 The objects `csvFuturesContractPriceData` and `arcticFuturesContractPriceData` are 'data pipelines', which allow us to read and write a specific type of data (in this case OHLC price data for individual futures contracts). They have the same methods (and they inherit from a more generic object, futuresContractPriceData), which allows us to write code that abstracts the actual place and way the data is stored. We'll see much more of this kind of thing later.
@@ -253,7 +324,7 @@ Then the roll calendar, plus the individual futures contract prices, can be used
 <a name="roll_calendars_from_approx"></a>
 ### Generate a roll calendar from actual futures prices
 
-This is the method you'd use if you were really starting from scratch, and you'd just got some prices for each futures contract. The relevant script is [here](/sysinit/futures/rollcalendars_from_arcticprices_to_csv.py); you should call the function `build_and_write_roll_calendar`. It is only set up to run a single instrument at a time: creating roll calendars is careful craftmanship, not suited to a batch process.
+This is the method you'd use if you were really starting from scratch, and you'd just got some prices for each futures contract. The relevant script is [here](/sysinit/futures/rollcalendars_from_arcticprices_to_csv.py); you should call the function `build_and_write_roll_calendar`. It is only set up to run a single instrument at a time: creating roll calendars is careful craftsmanship, not suited to a batch process.
 
 In this script (which you should run for each instrument in turn):
 
@@ -481,7 +552,7 @@ You can also run the script with `ADD_EXTRA_DATA = False, ADD_TO_CSV = True`. Th
 If you want your data to update:
 
 - [Ensure you are sampling all the contracts you want to sample](/docs/production.md#update-sampled-contracts-daily)
-- [Update the individual contract data]/docs/production.md#update-futures-contract-historical-price-data-daily)
+- [Update the individual contract data](/docs/production.md#update-futures-contract-historical-price-data-daily)
 - [Update multiple and adjusted prices](/docs/production.md#update-multiple-and-adjusted-prices-daily)
 
 These will be run daily if you're using the pysystemtrade production environment, and have set your [scheduler](/docs/production.md#scheduling) up to do `run_daily_price_updates`. But it's worth running them manually just the once (in the above order), especially after you've added data for a new market.
@@ -506,7 +577,7 @@ To further hide the data, I use two kinds of additional interface which embed `d
 
 Finally in production I use the objects in [this module](/sysproduction/data) to act as [interfaces](#production_interface) between production code and data blobs, so that production code doesn't need to be too concerned about the exact implementation of the data storage. These also include some business logic. 
 
-## Heirarchy of data storage and access objects
+## Hierarchy of data storage and access objects
 
 Generic data storage objects, used in both production and backtesting:
 
@@ -544,7 +615,7 @@ Production only data storage objects:
 - `baseData`: Does basic logging. Has `__getitem__` and `keys()` methods so it looks sort of like a dictionary
     - `listOfEntriesData`: generic 'point in time' data used for capital and positions
         - `mongoListOfEntriesData`
-        - `capitalData`
+        - `strategyCapitalData`
             - `mongocapitalData`
         - `strategyPositionData`
             - `mongoStrategyPositionData`
@@ -914,7 +985,7 @@ data.db_futures_adjusted_prices.get_list_of_instruments()
 
 A .csv is just another type of database as far as dataBlob is concerned. It's replaced the attribute we had before with a new one that now links to .csv files. 
 
-Here's a quick whistlestop tour of dataBlob's other features:
+Here's a quick whistle-stop tour of dataBlob's other features:
 
 
 - you can create it with a starting class list by passing the `parameter class_list=...`
@@ -927,7 +998,7 @@ Here's a quick whistlestop tour of dataBlob's other features:
 <a name="simData_objects"></a>
 ## simData objects
 
-The `simData` object is a compulsory part of the psystemtrade system object which runs simulations (or in live trading generates desired positions). The API required for that is laid out in the userguide, [here](/docs/backtesting.md#using-the-standard-data-objects). It's an interface between the contents of a dataBlob, and the simulation code.
+The `simData` object is a compulsory part of the pysystemtrade system object which runs simulations (or in live trading generates desired positions). The API required for that is laid out in the user guide, [here](/docs/backtesting.md#using-the-standard-data-objects). It's an interface between the contents of a dataBlob, and the simulation code.
 
 This modularity allows us to easily replace the data objects, so we could load our adjusted prices from mongo DB, or do 'back adjustment' of futures prices 'on the fly'.
 

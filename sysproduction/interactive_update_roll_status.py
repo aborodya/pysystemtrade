@@ -7,9 +7,16 @@ NOTE: this does not update the roll calendar .csv files stored elsewhere. Under 
 from dataclasses import dataclass
 import numpy as np
 
-from syscore.interactive import print_menu_of_values_and_get_response, get_and_convert
-from syscore.objects import success, failure, status, named_object
-from syscore.text import landing_strip, print_with_landing_strips_around
+from syscore.interactive.input import (
+    get_input_from_user_and_convert_to_type,
+    true_if_answer_is_yes,
+)
+from syscore.interactive.menus import print_menu_of_values_and_get_response
+from syscore.constants import named_object, status, success, failure
+from syscore.interactive.display import (
+    print_with_landing_strips_around,
+    landing_strip,
+)
 
 from sysdata.data_blob import dataBlob
 
@@ -21,12 +28,14 @@ from sysobjects.production.roll_state import (
     allowable_roll_state_from_current_and_position,
     RollState,
     no_roll_state,
+    roll_close_state,
 )
 
 from sysproduction.reporting.report_configs import roll_report_config
 from sysproduction.reporting.reporting_functions import run_report_with_data_blob
 
 from sysproduction.data.positions import diagPositions, updatePositions
+from sysproduction.data.controls import dataPositionLimits
 from sysproduction.data.contracts import dataContracts
 from sysproduction.data.prices import diagPrices, get_valid_instrument_code_from_user
 
@@ -180,7 +189,7 @@ def update_roll_status_full_auto(data: dataBlob):
 
 
 def get_days_ahead_to_consider_when_auto_cycling() -> int:
-    days_ahead = get_and_convert(
+    days_ahead = get_input_from_user_and_convert_to_type(
         "How many days ahead should I look for expiries?",
         type_expected=int,
         allow_default=True,
@@ -238,20 +247,16 @@ class autoRollParameters:
 
 
 def get_auto_roll_parameters() -> autoRollParameters:
-    min_volume = get_and_convert(
+    min_volume = get_input_from_user_and_convert_to_type(
         "Minimum relative volume before rolling",
         type_expected=float,
         allow_default=True,
         default_value=0.1,
     )
 
-    manual_prompt_for_position_str = input(
-        "Manually prompt for state if have position? (n / *anything for yes*)"
+    manual_prompt_for_position = true_if_answer_is_yes(
+        "Manually prompt for state if have position? (y/n)"
     )
-    if manual_prompt_for_position_str == "n":
-        manual_prompt_for_position = False
-    else:
-        manual_prompt_for_position = True
 
     if manual_prompt_for_position:
         state_when_position_held = no_change_required
@@ -267,7 +272,12 @@ def get_auto_roll_parameters() -> autoRollParameters:
     return auto_parameters
 
 
-STATE_OPTIONS = [RollState.Passive, RollState.Force, RollState.Force_Outright]
+STATE_OPTIONS = [
+    RollState.Passive,
+    RollState.Force,
+    RollState.Force_Outright,
+    RollState.Close,
+]
 STATE_OPTIONS_AS_STR = [str(state) for state in STATE_OPTIONS]
 
 
@@ -296,6 +306,7 @@ def auto_selected_roll_state_instrument(
 
     if roll_data.relative_volume < auto_parameters.min_volume:
 
+        run_roll_report(data, roll_data.instrument_code)
         print_with_landing_strips_around(
             "For %s relative volume of %f is less than minimum of %s : NOT AUTO ROLLING"
             % (
@@ -309,6 +320,7 @@ def auto_selected_roll_state_instrument(
     no_position_held = roll_data.position_priced_contract == 0
 
     if no_position_held:
+        run_roll_report(data, roll_data.instrument_code)
         print_with_landing_strips_around(
             "No position held, auto rolling adjusted price for %s"
             % roll_data.instrument_code
@@ -392,23 +404,22 @@ def get_roll_state_required(roll_data: RollDataWithStateReporting) -> RollState:
         if roll_state_required_as_str != roll_data.original_roll_status_as_string:
             # check if changing
             print("")
-            check = input(
+            okay_to_change = true_if_answer_is_yes(
                 "Changing roll state for %s from %s to %s, are you sure y/n to try again/<RETURN> to exit: "
                 % (
                     roll_data.instrument_code,
                     roll_data.original_roll_status_as_string,
                     roll_state_required_as_str,
-                )
+                ),
+                allow_empty_to_return_none=True,
             )
             print("")
-            if check == "y":
-                # happy
-                return RollState[roll_state_required_as_str]
-
-            elif check == "":
-                print("Okay, we're done")
+            if okay_to_change is None:
                 return no_change_required
 
+            if okay_to_change:
+                # happy
+                return RollState[roll_state_required_as_str]
             else:
                 print("OK. Choose again.")
                 # back to top of loop
@@ -470,6 +481,10 @@ def modify_roll_state(
         return
 
     update_positions = updatePositions(data)
+
+    if original_roll_state is roll_close_state:
+        roll_state_was_closed_now_something_else(data, instrument_code)
+
     update_positions.set_roll_state(instrument_code, roll_state_required)
     if roll_state_required is roll_adj_state:
         state_change_to_roll_adjusted_prices(
@@ -478,6 +493,27 @@ def modify_roll_state(
             original_roll_state=original_roll_state,
             confirm_adjusted_price_change=confirm_adjusted_price_change,
         )
+
+    if roll_state_required is roll_close_state:
+        roll_state_is_now_closing(data, instrument_code)
+
+
+def roll_state_was_closed_now_something_else(data: dataBlob, instrument_code: str):
+    print(
+        "Roll state is no longer closed, so removing temporary position limit of zero"
+    )
+    data_position_limits = dataPositionLimits(data)
+    data_position_limits.reset_position_limit_for_instrument_to_original_value(
+        instrument_code
+    )
+
+
+def roll_state_is_now_closing(data: dataBlob, instrument_code: str):
+    print("Roll state is Close, so setting temporary position limit of zero")
+    data_position_limits = dataPositionLimits(data)
+    data_position_limits.temporarily_set_position_limit_to_zero_and_store_original_limit(
+        instrument_code
+    )
 
 
 def state_change_to_roll_adjusted_prices(
@@ -527,22 +563,21 @@ def roll_adjusted_and_multiple_prices(
     print("")
     print("Rolling adjusted prices!")
     print("")
-    try:
-        rolling_adj_and_mult_object = rollingAdjustedAndMultiplePrices(
-            data, instrument_code
-        )
-
-        # this will also do the roll calculations
-        rolling_adj_and_mult_object.compare_old_and_new_prices()
-    except Exception as e:
-        print("Error %s when trying to calculate roll prices" % str(e))
+    rolling_adj_and_mult_object = get_roll_adjusted_multiple_prices_object(
+        data=data, instrument_code=instrument_code
+    )
+    if rolling_adj_and_mult_object is failure:
+        print("Error when trying to calculate roll prices")
         return failure
 
+    ## prints to screen
+    rolling_adj_and_mult_object.compare_old_and_new_prices()
+
     if confirm_adjusted_price_change:
-        confirm_roll = input(
+        is_okay_to_roll = true_if_answer_is_yes(
             "Confirm roll adjusted prices for %s are you sure y/n:" % instrument_code
         )
-        if confirm_roll != "y":
+        if not is_okay_to_roll:
             print(
                 "\nUSER DID NOT WANT TO ROLL: Setting roll status back to previous state"
             )
@@ -561,3 +596,63 @@ def roll_adjusted_and_multiple_prices(
         return failure
 
     return success
+
+
+def get_roll_adjusted_multiple_prices_object(
+    data: dataBlob,
+    instrument_code: str,
+) -> rollingAdjustedAndMultiplePrices:
+
+    ## returns failure if goes wrong
+    try:
+        rolling_adj_and_mult_object = rollingAdjustedAndMultiplePrices(
+            data, instrument_code
+        )
+        ## We do this as getting the object doesn't guarantee it works
+        _unused_ = rolling_adj_and_mult_object.updated_multiple_prices
+        _unused_ = rolling_adj_and_mult_object.new_adjusted_prices
+
+    except Exception as e:
+        print("Error %s when trying to calculate roll prices" % str(e))
+        ## Possibly forward fill
+        rolling_adj_and_mult_object = (
+            _get_roll_adjusted_multiple_prices_object_ffill_option(
+                data, instrument_code
+            )
+        )
+
+    return rolling_adj_and_mult_object
+
+
+def _get_roll_adjusted_multiple_prices_object_ffill_option(
+    data: dataBlob, instrument_code: str
+) -> rollingAdjustedAndMultiplePrices:
+
+    ## returns failure if goes wrong
+    try_forward_fill = true_if_answer_is_yes(
+        "Do you want to try forward filling prices first (less accurate, but guarantees roll)? [y/n]"
+    )
+
+    if not try_forward_fill:
+        print("OK, nothing I can do")
+        return failure
+
+    try:
+        rolling_adj_and_mult_object = rollingAdjustedAndMultiplePrices(
+            data, instrument_code, allow_forward_fill=True
+        )
+        ## We do this as getting the object doesn't guarantee it works
+        _unused_ = rolling_adj_and_mult_object.updated_multiple_prices
+
+    except Exception as e:
+        print(
+            "Error %s when trying to calculate roll prices, even when forward filling"
+            % str(e)
+        )
+        return failure
+
+    return rolling_adj_and_mult_object
+
+
+if __name__ == "__main__":
+    interactive_update_roll_status()

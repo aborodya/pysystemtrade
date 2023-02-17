@@ -3,11 +3,8 @@ from copy import copy
 import numpy as np
 import pandas as pd
 
-from syscore.objects import named_object
-from syscore.merge_data import full_merge_of_existing_series
+from syscore.pandas.full_merge_with_replacement import full_merge_of_existing_series
 from sysobjects.dict_of_named_futures_per_contract_prices import (
-    price_column_names,
-    contract_column_names,
     price_name,
     contract_name_from_column_name,
 )
@@ -29,7 +26,7 @@ class futuresAdjustedPrices(pd.Series):
         Our graceful fail is to return an empty, but valid, dataframe
         """
 
-        futures_contract_prices = futuresContractPrices(pd.Series())
+        futures_contract_prices = futuresContractPrices(pd.Series(dtype="float64"))
 
         return futures_contract_prices
 

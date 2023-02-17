@@ -60,12 +60,16 @@ default_config_yaml_files = package_files(default_config_path, "yaml")
 brokers_csv_path = os.path.join(dir_this_file(), "sysbrokers")
 brokers_csv_files = package_files(brokers_csv_path, "csv")
 
+brokers_yaml_path = os.path.join(dir_this_file(), "sysbrokers")
+brokers_yaml_files = package_files(brokers_yaml_path, "yaml")
+
 package_data = {
     "": private_yaml_files
     + provided_yaml_files
     + data_csv_files
     + test_data_csv_files
     + brokers_csv_files
+    + brokers_yaml_files
     + control_yaml_files
     + default_config_yaml_files
 }
@@ -89,8 +93,9 @@ setup(
     install_requires=[
         "pandas==1.0.5",
         "matplotlib>=3.0.0",
-        "PyYAML>==5.4",
-        "numpy>=1.19.4",
+        "ib-insync==0.9.70",
+        "PyYAML>=5.4",
+        "numpy>=1.19.4,<1.24.0",
         "scipy>=1.0.0",
         "pymongo==3.9.0",
         "arctic==1.79.2",
@@ -99,6 +104,7 @@ setup(
         "Flask>=2.0.1",
         "Werkzeug>=2.0.1",
         "statsmodels==0.12.2",
+        "PyPDF2>=2.5.0",
     ],
     tests_require=["nose", "flake8"],
     extras_require=dict(),

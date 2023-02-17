@@ -3,9 +3,17 @@ from copy import copy
 
 import pandas as pd
 
-from syscore.genutils import progressBar
-from syscore.objects import arg_not_supplied, missing_data
-from syscore.pdutils import calculate_cost_deflator, get_row_of_series
+from sysquant.estimators.stdev_estimator import stdevEstimates
+from sysquant.estimators.correlations import (
+    correlationEstimate,
+)
+from sysquant.estimators.covariance import (
+    covariance_from_stdev_and_correlation,
+)
+from syscore.interactive.progress_bar import progressBar
+from syscore.constants import arg_not_supplied
+from syscore.pandas.find_data import get_row_of_series
+from syscore.pandas.strategy_functions import calculate_cost_deflator
 from systems.provided.dynamic_small_system_optimise.optimisation import (
     objectiveFunctionForGreedy,
     constraintsForDynamicOpt,
@@ -45,7 +53,12 @@ class optimisedPositions(SystemStage):
     def get_optimised_position_df(self) -> pd.DataFrame:
         self.log.msg("Optimising positions for small capital: may take a while!")
         common_index = list(self.common_index())
-        p = progressBar(len(common_index), show_timings=True, show_each_time=True)
+        progress = progressBar(
+            len(common_index),
+            suffix="Optimising positions",
+            show_each_time=True,
+            show_timings=True,
+        )
         previous_optimal_positions = portfolioWeights.allzeros(self.instrument_list())
         position_list = []
         for relevant_date in common_index:
@@ -55,8 +68,8 @@ class optimisedPositions(SystemStage):
             )
             position_list.append(optimal_positions)
             previous_optimal_positions = copy(optimal_positions)
-            p.iterate()
-        p.finished()
+            progress.iterate()
+        progress.close()
         position_df = pd.DataFrame(position_list, index=common_index)
 
         return position_df
@@ -173,10 +186,12 @@ class optimisedPositions(SystemStage):
         cost_deflator = self.get_cost_deflator_on_date(
             instrument_code, relevant_date=relevant_date
         )
-        cost_per_contract_as_proportion_of_capital = (
-            self.get_cost_per_contract_as_proportion_of_capital(instrument_code)
+        cost_per_notional_weight_as_proportion_of_capital = (
+            self.get_cost_per_notional_weight_as_proportion_of_capital(instrument_code)
         )
-        deflated_cost = cost_per_contract_as_proportion_of_capital * cost_deflator
+        deflated_cost = (
+            cost_per_notional_weight_as_proportion_of_capital * cost_deflator
+        )
 
         return deflated_cost
 
@@ -197,12 +212,25 @@ class optimisedPositions(SystemStage):
         return deflator
 
     @diagnostic()
-    def get_cost_per_contract_as_proportion_of_capital(self, instrument_code) -> float:
+    def get_cost_per_notional_weight_as_proportion_of_capital(
+        self, instrument_code
+    ) -> float:
         cost_per_contract = self.get_cost_per_contract_in_base_ccy(instrument_code)
-        trading_capital = self.get_trading_capital()
         cost_multiplier = self.cost_multiplier()
+        notional_value_per_contract_as_proportion_of_capital = (
+            self.get_current_contract_value_as_proportion_of_capital_for_instrument(
+                instrument_code
+            )
+        )
+        capital = self.get_trading_capital()
+        cost_per_notional_weight_as_proportion_of_capital = calculate_cost_per_notional_weight_as_proportion_of_capital(
+            cost_per_contract=cost_per_contract,
+            cost_multiplier=cost_multiplier,
+            notional_value_per_contract_as_proportion_of_capital=notional_value_per_contract_as_proportion_of_capital,
+            capital=capital,
+        )
 
-        return cost_multiplier * cost_per_contract / trading_capital
+        return cost_per_notional_weight_as_proportion_of_capital
 
     def cost_multiplier(self) -> float:
         cost_multiplier = float(self.config.small_system["cost_multiplier"])
@@ -233,19 +261,70 @@ class optimisedPositions(SystemStage):
         self, relevant_date: datetime.datetime = arg_not_supplied
     ) -> covarianceEstimate:
 
-        return self.portfolio_stage.get_covariance_matrix(
+        correlation_estimate = self.get_correlation_matrix(relevant_date=relevant_date)
+
+        stdev_estimate = self.get_stdev_estimate(relevant_date=relevant_date)
+
+        covariance = covariance_from_stdev_and_correlation(
+            correlation_estimate, stdev_estimate
+        )
+
+        return covariance
+
+    def get_correlation_matrix(
+        self, relevant_date: datetime.datetime = arg_not_supplied
+    ) -> correlationEstimate:
+
+        corr_matrix = self.portfolio_stage.get_correlation_matrix(
             relevant_date=relevant_date
         )
+        corr_matrix = copy(
+            corr_matrix.shrink_to_offdiag(
+                shrinkage_corr=self.correlation_shrinkage, offdiag=0.0
+            )
+        )
+
+        return corr_matrix
+
+    @property
+    def correlation_shrinkage(self) -> float:
+        correlation_shrinkage = float(
+            self.config.small_system["shrink_instrument_returns_correlation"]
+        )
+        return correlation_shrinkage
+
+    def get_stdev_estimate(
+        self, relevant_date: datetime.datetime = arg_not_supplied
+    ) -> stdevEstimates:
+
+        return self.portfolio_stage.get_stdev_estimate(relevant_date=relevant_date)
 
     def get_per_contract_value(
         self, relevant_date: datetime.datetime = arg_not_supplied
     ):
         return self.portfolio_stage.get_per_contract_value(relevant_date)
 
-    def get_per_contract_value_as_proportion_of_capital_df(self) -> pd.DataFrame:
-        return (
-            self.portfolio_stage.get_per_contract_value_as_proportion_of_capital_df()
+    def get_current_contract_value_as_proportion_of_capital_for_instrument(
+        self, instrument_code: str
+    ) -> float:
+
+        value_as_ts = (
+            self.get_contract_ts_value_as_proportion_of_capital_for_instrument(
+                instrument_code
+            )
         )
+        return value_as_ts.ffill().iloc[-1]
+
+    def get_contract_ts_value_as_proportion_of_capital_for_instrument(
+        self, instrument_code: str
+    ) -> pd.Series:
+
+        return self.portfolio_stage.get_per_contract_value_as_proportion_of_capital(
+            instrument_code
+        )
+
+    def get_per_contract_value_as_proportion_of_capital_df(self) -> pd.DataFrame:
+        return self.portfolio_stage.get_per_contract_value_as_proportion_of_capital_df()
 
     def instrument_list(self) -> list:
         return self.parent.get_instrument_list()
@@ -301,3 +380,19 @@ class optimisedPositions(SystemStage):
     @property
     def config(self):
         return self.parent.config
+
+
+def calculate_cost_per_notional_weight_as_proportion_of_capital(
+    notional_value_per_contract_as_proportion_of_capital: float,
+    cost_per_contract: float,
+    capital: float,
+    cost_multiplier: float = 1.0,
+) -> float:
+
+    dollar_cost = (
+        cost_multiplier
+        * cost_per_contract
+        / notional_value_per_contract_as_proportion_of_capital
+    )
+
+    return dollar_cost / capital

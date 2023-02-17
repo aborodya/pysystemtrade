@@ -5,10 +5,11 @@ from dataclasses import dataclass
 
 
 from syscore.genutils import flatten_list
-from syscore.pdutils import get_row_of_df_aligned_to_weights_as_dict
+from syscore.pandas.find_data import get_row_of_df_aligned_to_weights_as_dict
 
 from sysquant.estimators.estimates import Estimates
 from sysquant.estimators.correlation_estimator import correlationEstimate
+from sysquant.estimators.stdev_estimator import stdevEstimates
 
 
 class portfolioWeights(dict):
@@ -72,6 +73,16 @@ class portfolioWeights(dict):
 
     def as_list_given_keys(self, list_of_keys: list):
         return [self[key] for key in list_of_keys]
+
+    def product_with_stdev(self, stdev: stdevEstimates):
+        stdev_align_list = stdev.list_in_key_order(self.assets)
+        self_align_list = self.as_list()
+
+        product = list(np.array(stdev_align_list) * np.array(self_align_list))
+
+        return self.from_weights_and_keys(
+            list_of_weights=product, list_of_keys=self.assets
+        )
 
     @classmethod
     def from_list_of_subportfolios(portfolioWeights, list_of_portfolio_weights):
@@ -149,20 +160,22 @@ class portfolioWeights(dict):
 
         variance = weights_np.dot(corr_np).dot(weights_np)
 
-        risk = variance ** 0.5
+        risk = variance**0.5
 
         return risk
 
+
 class seriesOfPortfolioWeights(pd.DataFrame):
-    def get_weights_on_date(self, relevant_date: datetime.datetime) \
-            -> portfolioWeights:
-        weights_as_dict = get_row_of_df_aligned_to_weights_as_dict(df=self,
-                                                 relevant_date=relevant_date)
+    def get_weights_on_date(self, relevant_date: datetime.datetime) -> portfolioWeights:
+        weights_as_dict = get_row_of_df_aligned_to_weights_as_dict(
+            df=self, relevant_date=relevant_date
+        )
 
         return portfolioWeights(weights_as_dict)
 
     def get_sum_leverage(self) -> pd.Series:
         return self.abs().sum(axis=1)
+
 
 def _int_from_nan(x: float):
     if np.isnan(x):
@@ -196,4 +209,3 @@ def one_over_n_weights_given_asset_names(list_of_asset_names: list) -> portfolio
     return portfolioWeights(
         [(asset_name, weight) for asset_name in list_of_asset_names]
     )
-

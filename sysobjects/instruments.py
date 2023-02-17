@@ -1,4 +1,6 @@
-from syscore.objects import arg_not_supplied
+import numpy as np
+from copy import copy
+from syscore.constants import arg_not_supplied
 from syscore.genutils import flatten_list
 from dataclasses import dataclass
 import pandas as pd
@@ -37,29 +39,78 @@ class futuresInstrument(object):
         return str(self.instrument_code)
 
 
-@dataclass
-class instrumentMetaData:
-    Description: str = ""
-    Pointsize: float = 0.0
-    Currency: str = ""
-    AssetClass: str = ""
-    Slippage: float = 0.0
-    PerBlock: float = 0.0
-    Percentage: float = 0.0
-    PerTrade: float = 0.0
+META_FIELD_LIST = [
+    "Description",
+    "Pointsize",
+    "Currency",
+    "AssetClass",
+    "Slippage",
+    "PerBlock",
+    "Percentage",
+    "PerTrade",
+    "Region",
+]
+
+
+def _zero_if_nan(x):
+    if np.isnan(x):
+        return 0
+    else:
+        return x
+
+
+NO_REGION = "NO_REGION"
+
+
+def _string_if_nan(x, string=NO_REGION):
+    if np.isnan(x):
+        return string
+    else:
+        return x
+
+
+class instrumentMetaData(object):
+    def __init__(
+        self,
+        Description: str = "",
+        Pointsize: float = 0.0,
+        Currency: str = "",
+        AssetClass: str = "",
+        Slippage: float = 0.0,
+        PerBlock: float = 0.0,
+        Percentage: float = 0.0,
+        PerTrade: float = 0.0,
+        Region: str = "",
+    ):
+
+        self.Description = Description
+        self.Currency = Currency
+        self.Pointsize = _zero_if_nan(Pointsize)
+        self.AssetClass = AssetClass
+        self.Slippage = _zero_if_nan(Slippage)
+        self.PerBlock = _zero_if_nan(PerBlock)
+        self.Percentage = _zero_if_nan(Percentage)
+        self.PerTrade = _zero_if_nan(PerTrade)
+        self.Region = Region
 
     def as_dict(self) -> dict:
-        keys = self.__dataclass_fields__.keys()
+        keys = META_FIELD_LIST
         self_as_dict = dict([(key, getattr(self, key)) for key in keys])
 
         return self_as_dict
 
     @classmethod
     def from_dict(instrumentMetaData, input_dict):
-        keys = instrumentMetaData.__dataclass_fields__.keys()
+        keys = list(input_dict.keys())
         args_list = [input_dict[key] for key in keys]
 
         return instrumentMetaData(*args_list)
+
+    def __eq__(self, other):
+        return self.as_dict() == other.as_dict()
+
+    def __repr__(self):
+        return str(self.as_dict())
 
 
 @dataclass
@@ -100,6 +151,12 @@ class futuresInstrumentWithMetaData:
 
     def empty(self):
         return self.instrument.empty()
+
+    def __eq__(self, other):
+        instrument_matches = self.instrument == other.instrument
+        meta_data_matches = self.meta_data == other.meta_data
+
+        return instrument_matches and meta_data_matches
 
 
 class listOfFuturesInstrumentWithMetaData(list):
@@ -221,6 +278,26 @@ class instrumentCosts(object):
                 self.value_of_pertrade_commission,
             )
         )
+
+    def commission_only(self):
+        new_costs = instrumentCosts(
+            price_slippage=0.0,
+            value_of_block_commission=self.value_of_block_commission,
+            percentage_cost=self.percentage_cost,
+            value_of_pertrade_commission=self.value_of_pertrade_commission,
+        )
+
+        return new_costs
+
+    def spread_only(self):
+        new_costs = instrumentCosts(
+            price_slippage=self.price_slippage,
+            value_of_block_commission=0,
+            percentage_cost=0,
+            value_of_pertrade_commission=0,
+        )
+
+        return new_costs
 
     @property
     def price_slippage(self):

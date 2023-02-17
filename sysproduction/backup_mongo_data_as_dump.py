@@ -30,8 +30,9 @@ class backupMongo(object):
         backup_mongo_dump(data)
 
 
-def dump_mongo_data(data):
-    host = get_production_config().get_element_or_arg_not_supplied("mongo_host")
+def dump_mongo_data(data: dataBlob):
+    config = data.config
+    host = config.get_element_or_arg_not_supplied("mongo_host")
     path = get_mongo_dump_directory()
     data.log.msg("Dumping mongo data to %s NOT TESTED IN WINDOWS" % path)
     if host.startswith("mongodb://"):
@@ -46,3 +47,7 @@ def backup_mongo_dump(data):
     destination_path = get_mongo_backup_directory()
     data.log.msg("Copy from %s to %s" % (source_path, destination_path))
     os.system("rsync -av %s %s" % (source_path, destination_path))
+
+
+if __name__ == "__main__":
+    backup_mongo_data_as_dump()

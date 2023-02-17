@@ -10,7 +10,8 @@ from systems.stage import SystemStage
 from systems.system_cache import input, dont_cache, diagnostic, output
 
 from syscore.genutils import str2Bool
-from syscore.objects import resolve_function, missing_data
+from syscore.objects import resolve_function
+from syscore.constants import missing_data
 
 
 class ForecastScaleCap(SystemStage):
@@ -276,7 +277,7 @@ class ForecastScaleCap(SystemStage):
         scaling_factor = scalar_function(
             cs_forecasts,
             target_abs_forecast=target_abs_forecast,
-            **forecast_scalar_config
+            **forecast_scalar_config,
         )
 
         return scaling_factor

@@ -4,7 +4,10 @@ from ib_insync.order import (
     Trade as ibTrade,
     Order as ibOrder,
 )
-from syscore.objects import arg_not_supplied, missing_order, missing_contract
+
+from syscore.exceptions import missingContract
+from syscore.constants import arg_not_supplied
+from sysexecution.orders.named_order_objects import missing_order
 from sysbrokers.IB.client.ib_contracts_client import ibContractsClient
 from sysbrokers.IB.ib_translate_broker_order_objects import (
     tradeWithContract,
@@ -36,6 +39,9 @@ class ibOrdersClient(ibContractsClient):
         :return: list
         """
         self.refresh()
+
+        ## Seems to make it more likely we get open orders back
+        self.ib.reqAllOpenOrders()
         trades_in_broker_format = self.ib.trades()
         if account_id is not arg_not_supplied:
             trades_in_broker_format_this_account = [
@@ -92,12 +98,13 @@ class ibOrdersClient(ibContractsClient):
         :return: brokers trade object
 
         """
-        ibcontract_with_legs = self.ib_futures_contract_with_legs(
-            futures_contract_with_ib_data=futures_contract_with_ib_data,
-            trade_list_for_multiple_legs=trade_list,
-        )
 
-        if ibcontract_with_legs is missing_contract:
+        try:
+            ibcontract_with_legs = self.ib_futures_contract_with_legs(
+                futures_contract_with_ib_data=futures_contract_with_ib_data,
+                trade_list_for_multiple_legs=trade_list,
+            )
+        except missingContract:
             return missing_order
 
         ibcontract = ibcontract_with_legs.ibcontract

@@ -5,8 +5,8 @@ from systems.accounts.curves.account_curve_group import accountCurveGroup
 from syscore.genutils import flatten_list
 from syscore.dateutils import ROOT_BDAYS_INYEAR
 
-from syscore.pdutils import listOfDataFrames
-
+from syscore.pandas.list_of_df import listOfDataFrames
+from syscore.pandas.list_of_df import stacked_df_with_added_time_from_list
 
 SINGLE_NAME = "asset"
 
@@ -58,7 +58,13 @@ class returnsForOptimisation(pd.DataFrame):
 
     def __reduce__(self):
         t = super().__reduce__()
-        t[2].update( {'_is_copy':self._is_copy, '_frequency':self._frequency, '_pooled_length':self._pooled_length } )
+        t[2].update(
+            {
+                "_is_copy": self._is_copy,
+                "_frequency": self._frequency,
+                "_pooled_length": self._pooled_length,
+            }
+        )
         return t[0], t[1], t[2]
 
     @property
@@ -123,8 +129,8 @@ class dictOfReturnsForOptimisation(dict):
             returns_as_list_downsampled.reindex_to_common_index()
         )
 
-        returns_for_optimisation = (
-            returns_as_list_common_ts.stacked_df_with_added_time_from_list()
+        returns_for_optimisation = stacked_df_with_added_time_from_list(
+            returns_as_list_common_ts
         )
         returns_for_optimisation = returnsForOptimisation(
             returns_for_optimisation, frequency=frequency, pooled_length=pooled_length

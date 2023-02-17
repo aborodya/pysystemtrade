@@ -1,5 +1,58 @@
 # Release notes
 
+## Version 1.50
+
+- Added optional code to run price collection throughout the day, see [announcement](https://github.com/robcarver17/pysystemtrade/discussions/961)
+- Added ability to pass arguments to methods through control_config.yaml
+- Added regions to instrument.csv configuration; use interactive_controls, option 5, option 52 to apply
+
+## Version 1.48
+
+- Added new run_ processes, breaking out FX, update sampled contracts, and update multiple/adjusted prices from daily price updates. You will need to update your crontab and control_config.yaml, see **discussion here**
+- Refactoring syscore
+- Changed handling of expensive instruments, [see this discussion](https://github.com/robcarver17/pysystemtrade/discussions/938)
+- Added requirement for BLACK [see this discussion](https://github.com/robcarver17/pysystemtrade/discussions/921)
+- Roll report clean up format [discussed here](https://github.com/robcarver17/pysystemtrade/discussions/864)
+- Gradual removal of missing_data, missing_contract type objects and replace with exceptions
+- Algos won't be allocated just before day end [discussed here](https://github.com/robcarver17/pysystemtrade/discussions/853)
+- Timezones can now be manually configured [discussed here](https://github.com/robcarver17/pysystemtrade/discussions/845)
+- Auto copying of instrument config data between db and csv
+- Utility to cross check IB configuration multipliers
+- Utility to delete instrument data
+- Custom private directory 
+- Utility to modify roll config 
+
+## Version 1.47
+
+- fix for #729. Added hourly and daily per contract prices IMPORTANT YOU MUST RUN /sysinit/futures/create_hourly_and_daily.py from the command line to create hourly and daily data.
+
+## Version 1.46
+
+- fix for #745. Now correlation estimates for instrument returns are not shrunk, except when doing DO. Note that this will affect risk calculations and risk overlays.
+
+## Version 1.45
+
+- Changed storage of capital IMPORTANT YOU MUST RUN sysdata/production/TEMP_capital_transfer.py from the command line to transfer your old capital
+
+
+## Version 1.40
+
+- "Market movers" report added
+- Nicer functionality to get dates into reports interactively
+- Added volume limits to auto fill position limits
+- Fixed cost calculation for dynamic optimisation (see [discussion](https://github.com/robcarver17/pysystemtrade/discussions/647))
+- Private config now always pulled in, even for backtests (see [discussion](https://github.com/robcarver17/pysystemtrade/discussions/633))
+- Improved price cleaning (see [discussion](https://github.com/robcarver17/pysystemtrade/discussions/646))
+
+## Version 1.31 (didn't seem to do any notes for 1.30)
+
+- Started introducing intraday strategy support
+- Roll code will now forward fill prices if requested instead of failing
+- Report to remove suggested instruments now 'buffers' to avoid too many changes
+- A lot of improvements to reporting; new reports, split up existing reports
+- Clearer exposition of IB vs my multipliers
+
+
 ## Version 1.20
 
 - Skipped a few versions to tag it, why not
@@ -158,7 +211,7 @@ Note that the large contract prices will continue to be updated (best to keep do
 
 ## Version 0.51.0
 
-- Essentially 'finished' production.md (in as much as anything can be finished...)
+- Essentially 'close' production.md (in as much as anything can be close...)
 - Changed data Blobs so now take lists of objects rather than str, easier to see dependencies
 
 ## Version 0.50.0
@@ -229,7 +282,7 @@ Note that the large contract prices will continue to be updated (best to keep do
 
 ## Version 0.23.0
 
-- 'get_filename_for_package' can now take absolute as well as relative paths, and can cope with separate file names
+- 'resolve_path_and_filename_for_package' can now take absolute as well as relative paths, and can cope with separate file names
 - Updated legacy .csv files
 - Fixed a few bugs
 - Can now get unexpired contracts for a given instrument using 'contractDateWithRollParameters.get_unexpired_contracts_from_now_to_contract_date()'
@@ -450,7 +503,7 @@ Moved most examples except core to separate git [here](https://github.com/robcar
 
 * Added methods to accountCurveGroup.get_stats(): .mean(), .std(), .tstat(), .pvalue()
 * Added method to accountCurveGroup stack; stack object can also produce bootstrap
-* Added account_test(ac1, ac2) to produce a t-test statistic for any two account curve like objects.
+* Added account_t_test(ac1, ac2) to produce a t-test statistic for any two account curve like objects.
 
 ## Version 0.6.0
 

@@ -18,6 +18,15 @@ class positionLimit(object):
     def __repr__(self):
         return "Position limit for %s is %s" % (str(self.key), str(self.position_limit))
 
+    def minimum_position_limit(self, other_position_limit) -> int:
+        if other_position_limit.no_limit:
+            return self.position_limit
+
+        if self.no_limit:
+            return other_position_limit.no_limit
+
+        return min(self.position_limit, other_position_limit.position_limit)
+
     @property
     def position_limit(self):
         return self._position_limit
@@ -29,6 +38,10 @@ class positionLimit(object):
     @property
     def key(self):
         return self.tradeable_object.key
+
+    @property
+    def no_limit(self):
+        return self.position_limit == NO_LIMIT
 
 
 class positionLimitForInstrument(positionLimit):
@@ -117,75 +130,75 @@ def what_trade_is_possible_single_leg_trade(
     position: int, position_limit: int, proposed_trade: int
 ) -> int:
     """
-    >>> what_trade_is_possible(1, 1, 0)
+    >>> what_trade_is_possible_single_leg_trade(1, 1, 0)
     0
-    >>> what_trade_is_possible(5, 1, 0)
+    >>> what_trade_is_possible_single_leg_trade(5, 1, 0)
     0
-    >>> what_trade_is_possible(0, 3, 1)
+    >>> what_trade_is_possible_single_leg_trade(0, 3, 1)
     1
-    >>> what_trade_is_possible(0, 3, 2)
+    >>> what_trade_is_possible_single_leg_trade(0, 3, 2)
     2
-    >>> what_trade_is_possible(0, 3, 3)
+    >>> what_trade_is_possible_single_leg_trade(0, 3, 3)
     3
-    >>> what_trade_is_possible(0, 3, 4)
+    >>> what_trade_is_possible_single_leg_trade(0, 3, 4)
     3
-    >>> what_trade_is_possible(0, 3, -1)
+    >>> what_trade_is_possible_single_leg_trade(0, 3, -1)
     -1
-    >>> what_trade_is_possible(0, 3, -2)
+    >>> what_trade_is_possible_single_leg_trade(0, 3, -2)
     -2
-    >>> what_trade_is_possible(0, 3, -3)
+    >>> what_trade_is_possible_single_leg_trade(0, 3, -3)
     -3
-    >>> what_trade_is_possible(0, 3, -4)
+    >>> what_trade_is_possible_single_leg_trade(0, 3, -4)
     -3
-    >>> what_trade_is_possible(2, 3, 1)
+    >>> what_trade_is_possible_single_leg_trade(2, 3, 1)
     1
-    >>> what_trade_is_possible(2, 3, 2)
+    >>> what_trade_is_possible_single_leg_trade(2, 3, 2)
     1
-    >>> what_trade_is_possible(2, 3, -2)
+    >>> what_trade_is_possible_single_leg_trade(2, 3, -2)
     -2
-    >>> what_trade_is_possible(2, 3, -4)
+    >>> what_trade_is_possible_single_leg_trade(2, 3, -4)
     -4
-    >>> what_trade_is_possible(2, 3, -5)
+    >>> what_trade_is_possible_single_leg_trade(2, 3, -5)
     -5
-    >>> what_trade_is_possible(2, 3, -6)
+    >>> what_trade_is_possible_single_leg_trade(2, 3, -6)
     -5
-    >>> what_trade_is_possible(5, 3, 2)
+    >>> what_trade_is_possible_single_leg_trade(5, 3, 2)
     0
-    >>> what_trade_is_possible(5, 3, -1)
+    >>> what_trade_is_possible_single_leg_trade(5, 3, -1)
     -1
-    >>> what_trade_is_possible(5, 3, -2)
+    >>> what_trade_is_possible_single_leg_trade(5, 3, -2)
     -2
-    >>> what_trade_is_possible(5, 3, -9)
+    >>> what_trade_is_possible_single_leg_trade(5, 3, -9)
     -8
-    >>> what_trade_is_possible(2, 3, -4)
+    >>> what_trade_is_possible_single_leg_trade(2, 3, -4)
     -4
-    >>> what_trade_is_possible(2, 3, -5)
+    >>> what_trade_is_possible_single_leg_trade(2, 3, -5)
     -5
-    >>> what_trade_is_possible(2, 3, -6)
+    >>> what_trade_is_possible_single_leg_trade(2, 3, -6)
     -5
-    >>> what_trade_is_possible(0, 3, 1)
+    >>> what_trade_is_possible_single_leg_trade(0, 3, 1)
     1
-    >>> what_trade_is_possible(0, 3, -4)
+    >>> what_trade_is_possible_single_leg_trade(0, 3, -4)
     -3
-    >>> what_trade_is_possible(-2, 3, -1)
+    >>> what_trade_is_possible_single_leg_trade(-2, 3, -1)
     -1
-    >>> what_trade_is_possible(-2, 3, -2)
+    >>> what_trade_is_possible_single_leg_trade(-2, 3, -2)
     -1
-    >>> what_trade_is_possible(-5, 3, -2)
+    >>> what_trade_is_possible_single_leg_trade(-5, 3, -2)
     0
-    >>> what_trade_is_possible(-5, 3, 1)
+    >>> what_trade_is_possible_single_leg_trade(-5, 3, 1)
     1
-    >>> what_trade_is_possible(-5, 3, 2)
+    >>> what_trade_is_possible_single_leg_trade(-5, 3, 2)
     2
-    >>> what_trade_is_possible(-5, 3, 2)
+    >>> what_trade_is_possible_single_leg_trade(-5, 3, 2)
     2
-    >>> what_trade_is_possible(-5, 3, 7)
+    >>> what_trade_is_possible_single_leg_trade(-5, 3, 7)
     7
-    >>> what_trade_is_possible(-5, 3, 9)
+    >>> what_trade_is_possible_single_leg_trade(-5, 3, 9)
     8
-    >>> what_trade_is_possible(-3, 3, 7)
+    >>> what_trade_is_possible_single_leg_trade(-3, 3, 7)
     6
-    >>> what_trade_is_possible(3, 3, -7)
+    >>> what_trade_is_possible_single_leg_trade(3, 3, -7)
     -6
 
     """

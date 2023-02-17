@@ -1,7 +1,7 @@
 import datetime
 import pandas as pd
 
-from syscore.objects import header, table, body_text
+from sysproduction.reporting.reporting_functions import table, header, body_text
 from sysdata.data_blob import dataBlob
 from sysobjects.production.backtest_storage import interactiveBacktest
 from sysproduction.strategy_code.report_system_classic import (
@@ -17,17 +17,17 @@ def report_system_dynamic(data: dataBlob, backtest: interactiveBacktest):
     strategy_name = backtest.strategy_name
     timestamp = backtest.timestamp
 
-    optimal_positions_df = get_optimal_positions_table_as_df(
-        data=data, strategy_name=backtest.strategy_name
-    )
-    optimal_positions_table = table("Optimal positions", optimal_positions_df)
-    format_output.append(optimal_positions_table)
-
     report_header = header(
         "Strategy report for %s backtest timestamp %s produced at %s"
         % (strategy_name, timestamp, str(datetime.datetime.now()))
     )
     format_output.append(report_header)
+
+    optimal_positions_df = get_optimal_positions_table_as_df(
+        data=data, strategy_name=backtest.strategy_name
+    )
+    optimal_positions_table = table("Optimal positions", optimal_positions_df)
+    format_output.append(optimal_positions_table)
 
     format_output = report_system_classic_no_header_or_footer(
         data, backtest=backtest, format_output=format_output
@@ -51,13 +51,13 @@ def get_optimal_positions_table_as_df(
     )
     as_verbose_pd = list_of_positions.as_verbose_pd()
 
+    if len(as_verbose_pd) == 0:
+        return pd.DataFrame()
+
     subset_of_pd = as_verbose_pd[
         [
             "dont_trade",
             "reduce_only",
-            "optimal_position",
-            "position_limit_contracts",
-            "previous_position",
             "weight_per_contract",
             "position_limit_weight",
             "optimum_weight",
@@ -66,6 +66,9 @@ def get_optimal_positions_table_as_df(
             "minimum_weight",
             "previous_weight",
             "optimised_weight",
+            "optimal_position",
+            "position_limit_contracts",
+            "previous_position",
             "optimised_position",
         ]
     ]

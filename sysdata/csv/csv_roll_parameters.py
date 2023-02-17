@@ -1,5 +1,5 @@
-from syscore.objects import arg_not_supplied
-from syscore.fileutils import get_filename_for_package
+from syscore.constants import arg_not_supplied
+from syscore.fileutils import resolve_path_and_filename_for_package
 from sysdata.futures.rolls_parameters import rollParametersData
 from sysobjects.rolls import rollParameters
 from syslogdiag.log_to_screen import logtoscreen
@@ -23,7 +23,7 @@ class csvRollParametersData(rollParametersData):
         super().__init__(log=log)
         if datapath is arg_not_supplied:
             datapath = ROLLS_DATAPATH
-        config_file = get_filename_for_package(datapath, ROLLS_CONFIG_FILE)
+        config_file = resolve_path_and_filename_for_package(datapath, ROLLS_CONFIG_FILE)
 
         self._config_file = config_file
 
@@ -47,6 +47,10 @@ class csvRollParametersData(rollParametersData):
             raise Exception("Badly configured file %s" % (self._config_file))
 
         return config_data
+
+    @property
+    def config_file(self):
+        return self._config_file
 
     def __repr__(self):
         return "Roll data for initialising system config"
@@ -77,3 +81,16 @@ class csvRollParametersData(rollParametersData):
         self, instrument_code: str, roll_parameters: rollParameters
     ):
         raise NotImplementedError("csv is read only")
+
+    def write_all_roll_parameters_data(self, roll_parameters_df: pd.DataFrame):
+        roll_parameters_df_to_write = pd.DataFrame(
+            dict(
+                HoldRollCycle=roll_parameters_df.hold_rollcycle,
+                RollOffsetDays=roll_parameters_df.roll_offset_day,
+                CarryOffset=roll_parameters_df.carry_offset,
+                PricedRollCycle=roll_parameters_df.priced_rollcycle,
+                ExpiryOffset=roll_parameters_df.approx_expiry_offset,
+            )
+        )
+
+        roll_parameters_df_to_write.to_csv(self._config_file, index_label="Instrument")

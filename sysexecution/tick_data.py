@@ -1,13 +1,14 @@
 from copy import copy
 import numpy as np
-import datetime
 import pandas as pd
 from collections import namedtuple
 
 from syscore.genutils import quickTimer
-from syscore.objects import arg_not_supplied, missing_data
+from syscore.exceptions import missingData
+from syscore.constants import missing_data, arg_not_supplied
 
 TICK_REQUIRED_COLUMNS = ["priceAsk", "priceBid", "sizeAsk", "sizeBid"]
+
 
 class dataFrameOfRecentTicks(pd.DataFrame):
     def __init__(self, *args, **kwargs):
@@ -27,12 +28,11 @@ class dataFrameOfRecentTicks(pd.DataFrame):
 
     @classmethod
     def create_empty(dataFrameOfRecentTicks):
-        return dataFrameOfRecentTicks(pd.DataFrame(
-            columns = TICK_REQUIRED_COLUMNS
-        ))
+        return dataFrameOfRecentTicks(pd.DataFrame(columns=TICK_REQUIRED_COLUMNS))
 
     def is_empty(self) -> bool:
-        return len(self)==0
+        return len(self) == 0
+
 
 def analyse_tick_data_frame(
     tick_data: dataFrameOfRecentTicks,
@@ -40,8 +40,6 @@ def analyse_tick_data_frame(
     forward_fill: bool = False,
     replace_qty_nans=False,
 ):
-    if tick_data is missing_data:
-        return missing_data
 
     if tick_data.is_empty():
         return missing_data
@@ -250,8 +248,8 @@ class tickerObject(object):
         if tick is arg_not_supplied:
             tick = self.current_tick()
 
-        if tick is missing_data or qty is arg_not_supplied:
-            return missing_data
+        if qty is arg_not_supplied:
+            raise missingData("Quantity must be specified")
 
         results = analyse_tick(tick, qty, replace_qty_nans=replace_qty_nans)
 
@@ -275,7 +273,7 @@ class tickerObject(object):
         timer = quickTimer(wait_time_seconds)
         while waiting:
             if timer.finished:
-                return missing_data
+                raise missingData
             self.refresh()
             last_bid = self.bid()
             last_ask = self.ask()
