@@ -16,7 +16,7 @@ from sysproduction.data.contracts import dataContracts
 from sysproduction.data.optimal_positions import dataOptimalPositions
 from sysproduction.data.backtest import store_backtest_state
 
-from syslogdiag.log_to_screen import logtoscreen
+from syslogging.logger import *
 
 from systems.basesystem import System
 
@@ -51,12 +51,10 @@ class runSystemCarryTrendDynamic(runSystemClassic):
 def dynamic_system(
     data: dataBlob,
     config_filename: str,
-    log=logtoscreen("futures_system"),
+    log=get_logger("futures_system"),
     notional_trading_capital: float = arg_not_supplied,
     base_currency: str = arg_not_supplied,
 ) -> System:
-
-    log_level = "on"
 
     sim_data = get_sim_data_object_for_production(data)
     config = Config(config_filename)
@@ -70,8 +68,6 @@ def dynamic_system(
 
     system = futures_system(data=sim_data, config=config)
     system._log = log
-
-    system.set_logging_level(log_level)
 
     return system
 
@@ -109,7 +105,6 @@ def futures_system(data, config):
         data,
         config,
     )
-    system.set_logging_level("on")
 
     return system
 
@@ -137,7 +132,7 @@ def updated_optimal_positions_for_dynamic_system(
             position_entry=position_entry,
         )
 
-        log.msg("New Optimal position %s %s" % (str(position_entry), instrument_code))
+        log.debug("New Optimal position %s %s" % (str(position_entry), instrument_code))
 
 
 def construct_optimal_position_entry(

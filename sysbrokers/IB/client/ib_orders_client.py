@@ -1,3 +1,4 @@
+from ib_insync import TagValue
 from ib_insync.order import (
     MarketOrder as ibMarketOrder,
     LimitOrder as ibLimitOrder,
@@ -22,6 +23,10 @@ from sysexecution.orders.broker_orders import (
     brokerOrderType,
     market_order_type,
     limit_order_type,
+    snap_mkt_type,
+    snap_mid_type,
+    snap_prim_type,
+    adaptive_mkt_type,
 )
 
 from sysobjects.contracts import futuresContract
@@ -140,6 +145,40 @@ class ibOrdersClient(ibContractsClient):
                 return missing_order
             else:
                 ib_order = ibLimitOrder(ib_BS_str, ib_qty, limit_price)
+        elif order_type is snap_mkt_type:
+            ## auxPrice is the offset so this will submit an order buy at the best offer, etc
+            ## Works like a market order but works for instruments with no streaming data
+            ib_order = ibOrder(
+                orderType="SNAP MKT",
+                action=ib_BS_str,
+                totalQuantity=ib_qty,
+                auxPrice=0.0,
+            )
+        elif order_type is snap_mid_type:
+            ## auxPrice is the offset so this will submit an order buy at the best offer, etc
+            ## Works like a market order but works for instruments with no streaming data
+            ib_order = ibOrder(
+                orderType="SNAP MID",
+                action=ib_BS_str,
+                totalQuantity=ib_qty,
+                auxPrice=0.0,
+            )
+        elif order_type is snap_prim_type:
+            ## auxPrice is the offset so this will submit an order buy at the best offer, etc
+            ## Works like a market order but works for instruments with no streaming data
+            ib_order = ibOrder(
+                orderType="SNAP PRIM",
+                action=ib_BS_str,
+                totalQuantity=ib_qty,
+                auxPrice=0.0,
+            )
+        elif order_type is adaptive_mkt_type:
+            # Uses a black-box algo w/ stated aim of balancing execution speed & price
+            # See https://investors.interactivebrokers.com/en/index.php?f=19091
+            ib_order = ibMarketOrder(ib_BS_str, ib_qty)
+            ib_order.algoStrategy = "Adaptive"
+            # Patient is usually pretty fast. Alternatives are Normal and Urgent
+            ib_order.algoParams = [TagValue("adaptivePriority", "Patient")]
         else:
             self.log.critical("Order type %s not recognised!" % order_type)
             return missing_order

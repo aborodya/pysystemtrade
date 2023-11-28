@@ -119,9 +119,6 @@ my_system = System(
     [my_account, fcs, my_rules, combiner, raw_data, position_size], data, my_config
 )
 
-# this is a bit slow, better to know what's going on
-my_system.set_logging_level("on")
-
 print(my_system.combForecast.get_forecast_weights("US10").tail(5))
 print(my_system.combForecast.get_forecast_diversification_multiplier("US10").tail(5))
 
@@ -150,7 +147,7 @@ print(my_system.positionSize.get_price_volatility("SOFR").tail(5))
 print(my_system.positionSize.get_block_value("SOFR").tail(5))
 print(my_system.positionSize.get_underlying_price("SOFR"))
 print(my_system.positionSize.get_instrument_value_vol("SOFR").tail(5))
-print(my_system.positionSize.get_volatility_scalar("SOFR").tail(5))
+print(my_system.positionSize.get_average_position_at_subsystem_level("SOFR").tail(5))
 print(my_system.positionSize.get_vol_target_dict())
 print(my_system.positionSize.get_subsystem_position("SOFR").tail(5))
 
@@ -168,8 +165,6 @@ my_system = System(
     data,
     my_config,
 )
-
-my_system.set_logging_level("on")
 
 print(my_system.portfolio.get_instrument_weights().tail(5))
 print(my_system.portfolio.get_instrument_diversification_multiplier().tail(5))
